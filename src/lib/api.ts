@@ -6,7 +6,8 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/a
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
-    "Content-Type": "application/json",
+    "Cache-Control": "no-cache",
+    "Pragma": "no-cache",
   },
 })
 
@@ -24,6 +25,17 @@ apiClient.interceptors.request.use(
     const token = getToken()
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
+    }
+    // Only set Content-Type for JSON requests
+    if (
+      config.data &&
+      typeof config.data === "object" &&
+      !(config.data instanceof FormData)
+    ) {
+      config.headers["Content-Type"] = "application/json"
+    } else {
+      // Let Axios/browser set Content-Type for FormData
+      delete config.headers["Content-Type"]
     }
     return config
   },
@@ -52,7 +64,8 @@ export const loginUser = async (credentials: LoginRequest): Promise<ApiResponse>
 
 export const getProfile = async (): Promise<ApiResponse> => {
   try {
-    const response = await apiClient.get<ApiResponse>("/auth/me")
+    const timestamp = new Date().getTime()
+    const response = await apiClient.get<ApiResponse>(`/auth/me?t=${timestamp}`)
     return response.data
   } catch (error: any) {
     return error.response?.data || { success: false, message: "An unknown error occurred" }

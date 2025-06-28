@@ -23,33 +23,51 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const router = useRouter()
 
   useEffect(() => {
+    console.log('[AuthContext] useEffect running')
     const initializeAuth = async () => {
       const storedToken = localStorage.getItem("token")
+      console.log('[AuthContext] storedToken:', storedToken)
+      
       if (storedToken) {
         setToken(storedToken)
         try {
+          console.log('[AuthContext] Fetching profile...')
           const response = await getProfile()
-          if (response.success) {
+          console.log('[AuthContext] getProfile response:', response)
+          
+          if (response.success && response.data) {
             setUser(response.data)
+            console.log('[AuthContext] User set:', response.data)
           } else {
+            console.log('[AuthContext] Profile fetch failed:', response.message)
             // Token is invalid, log out
-            await logoutUserApi()
             setToken(null)
             setUser(null)
             localStorage.removeItem("token")
+            console.log('[AuthContext] Token invalid, user logged out')
           }
         } catch (error) {
-          console.error("Failed to fetch profile", error)
+          console.error('[AuthContext] Failed to fetch profile', error)
           setToken(null)
           setUser(null)
           localStorage.removeItem("token")
         }
+      } else {
+        console.log('[AuthContext] No token found, user set to null')
+        setUser(null)
+        setToken(null)
       }
+      
       setIsLoading(false)
+      console.log('[AuthContext] isLoading set to false')
     }
 
     initializeAuth()
   }, [])
+
+  useEffect(() => {
+    console.log('[AuthContext] user:', user, 'isLoading:', isLoading)
+  }, [user, isLoading])
 
   const login = async (credentials: LoginRequest) => {
     const response = await loginUser(credentials)

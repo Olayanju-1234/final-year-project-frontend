@@ -47,7 +47,7 @@ export default function PropertyManagerDashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const { toast } = useToast()
-  const { user } = useAuth()
+  const { user, isLoading } = useAuth()
 
   // Form state for adding/editing property
   const [formData, setFormData] = useState({
@@ -77,24 +77,43 @@ export default function PropertyManagerDashboard() {
     }
   })
 
+  // Disable update if required fields are missing/invalid
+  const isUpdateDisabled =
+    !editingProperty ||
+    !formData.title || formData.title.length < 5 ||
+    !formData.description || formData.description.length < 20 ||
+    !formData.location.address ||
+    !formData.location.city ||
+    !formData.location.state ||
+    !formData.rent || isNaN(Number(formData.rent)) || Number(formData.rent) < 0 ||
+    !formData.bedrooms || isNaN(Number(formData.bedrooms)) || Number(formData.bedrooms) < 1 || Number(formData.bedrooms) > 20 ||
+    !formData.bathrooms || isNaN(Number(formData.bathrooms)) || Number(formData.bathrooms) < 1 || Number(formData.bathrooms) > 20 ||
+    !Array.isArray(formData.amenities) || formData.amenities.length === 0;
+
   // Image upload state
   const [selectedImages, setSelectedImages] = useState<File[]>([])
   const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([])
   const [uploadingImages, setUploadingImages] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Fetch properties on component mount
   useEffect(() => {
-    if (user) {
+    if (user && !isLoading) {
       fetchProperties()
     }
-  }, [user])
+  }, [user, isLoading])
 
   const fetchProperties = async () => {
-    if (!user) return
-    
+    console.log('fetchProperties called', user)
+    const userId = user?._id || user?.id
+    if (!user || !userId) {
+      console.log('No user or user id/_id found')
+      return
+    }
     try {
       setLoading(true)
-      const response = await propertiesApi.getByLandlord(user._id.toString())
+      const response = await propertiesApi.getByLandlord(userId.toString())
+      console.log('Properties API response:', response)
       if (response.success && response.data) {
         setProperties(response.data)
       } else {
@@ -129,33 +148,34 @@ export default function PropertyManagerDashboard() {
         return
       }
 
-      const propertyData = {
-        ...formData,
-        rent: Number(formData.rent),
-        bedrooms: Number(formData.bedrooms),
-        bathrooms: Number(formData.bathrooms),
-        size: formData.size ? Number(formData.size) : undefined,
-        // Ensure amenities is always an array
-        amenities: Array.isArray(formData.amenities) ? formData.amenities : [],
-        // Ensure features and utilities are objects
-        features: {
-          furnished: Boolean(formData.features.furnished),
-          petFriendly: Boolean(formData.features.petFriendly),
-          parking: Boolean(formData.features.parking),
-          balcony: Boolean(formData.features.balcony),
-        },
-        utilities: {
-          electricity: Boolean(formData.utilities.electricity),
-          water: Boolean(formData.utilities.water),
-          internet: Boolean(formData.utilities.internet),
-          gas: Boolean(formData.utilities.gas),
-        }
-      }
+      const formDataToSend = new FormData()
+      formDataToSend.append('title', formData.title)
+      formDataToSend.append('description', formData.description)
+      formDataToSend.append('rent', formData.rent.toString())
+      formDataToSend.append('bedrooms', formData.bedrooms.toString())
+      formDataToSend.append('bathrooms', formData.bathrooms.toString())
+      formDataToSend.append('size', formData.size.toString())
+      formDataToSend.append('location[address]', formData.location.address)
+      formDataToSend.append('location[city]', formData.location.city)
+      formDataToSend.append('location[state]', formData.location.state)
+      // Append amenities as multiple entries
+      formData.amenities.forEach(amenity => {
+        formDataToSend.append('amenities', amenity)
+      })
+      formDataToSend.append('features[furnished]', formData.features.furnished.toString())
+      formDataToSend.append('features[petFriendly]', formData.features.petFriendly.toString())
+      formDataToSend.append('features[parking]', formData.features.parking.toString())
+      formDataToSend.append('features[balcony]', formData.features.balcony.toString())
+      formDataToSend.append('utilities[electricity]', formData.utilities.electricity.toString())
+      formDataToSend.append('utilities[water]', formData.utilities.water.toString())
+      formDataToSend.append('utilities[internet]', formData.utilities.internet.toString())
+      formDataToSend.append('utilities[gas]', formData.utilities.gas.toString())
+      selectedImages.forEach(file => {
+        formDataToSend.append('images', file)
+      })
 
-      console.log("Sending property data:", propertyData) // Debug log
-      console.log("Selected images:", selectedImages) // Debug log
-
-      const response = await propertiesApi.create(propertyData, selectedImages)
+      console.log("Selected images before upload (handleCreateProperty):", selectedImages)
+      const response = await propertiesApi.create(formDataToSend)
       if (response.success) {
         toast({
           title: "Property Created!",
@@ -188,23 +208,105 @@ export default function PropertyManagerDashboard() {
   const handleUpdateProperty = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!editingProperty) return
-    
-    try {
-      const updateData = {
-        ...formData,
-        rent: Number(formData.rent),
-        bedrooms: Number(formData.bedrooms),
-        bathrooms: Number(formData.bathrooms),
-        size: formData.size ? Number(formData.size) : undefined,
-      }
 
-      const response = await propertiesApi.update(editingProperty._id.toString(), updateData)
+    // Prevent multiple submissions
+    if (isSubmitting) {
+      console.log('[UpdateProperty] Already submitting, ignoring request')
+      return
+    }
+
+    console.log('[UpdateProperty] Starting update with formData:', formData)
+    console.log('[UpdateProperty] editingProperty:', editingProperty)
+
+    // Validation: prevent submitting if required fields are empty or invalid
+    if (
+      !formData.title || formData.title.length < 5 ||
+      !formData.description || formData.description.length < 20 ||
+      !formData.location.address ||
+      !formData.location.city ||
+      !formData.location.state ||
+      !formData.rent || isNaN(Number(formData.rent)) || Number(formData.rent) < 0 ||
+      !formData.bedrooms || isNaN(Number(formData.bedrooms)) || Number(formData.bedrooms) < 1 || Number(formData.bedrooms) > 20 ||
+      !formData.bathrooms || isNaN(Number(formData.bathrooms)) || Number(formData.bathrooms) < 1 || Number(formData.bathrooms) > 20 ||
+      !Array.isArray(formData.amenities) || formData.amenities.length === 0
+    ) {
+      console.log('[UpdateProperty] Validation failed - form data is invalid')
+      toast({
+        title: "Validation Error",
+        description: "Please fill all required fields correctly before updating.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Store the current form data to prevent race conditions
+    const currentFormData = { ...formData }
+    const currentEditingProperty = editingProperty
+    const currentSelectedImages = [...selectedImages]
+
+    console.log('[UpdateProperty] Captured current form data:', currentFormData)
+    console.log('[UpdateProperty] Captured editing property:', currentEditingProperty)
+
+    try {
+      setIsSubmitting(true)
+      setUploadingImages(true)
+      let response
+      
+      if (currentSelectedImages.length > 0) {
+        // Use FormData for image upload
+        const formDataToSend = new FormData()
+        formDataToSend.append('title', String(currentFormData.title))
+        formDataToSend.append('description', String(currentFormData.description))
+        formDataToSend.append('rent', String(currentFormData.rent))
+        formDataToSend.append('bedrooms', String(currentFormData.bedrooms))
+        formDataToSend.append('bathrooms', String(currentFormData.bathrooms))
+        formDataToSend.append('size', String(currentFormData.size))
+        formDataToSend.append('location[address]', String(currentFormData.location.address))
+        formDataToSend.append('location[city]', String(currentFormData.location.city))
+        formDataToSend.append('location[state]', String(currentFormData.location.state))
+        // Append amenities as multiple entries
+        currentFormData.amenities.forEach(amenity => {
+          formDataToSend.append('amenities', String(amenity))
+        })
+        formDataToSend.append('features[furnished]', String(currentFormData.features.furnished))
+        formDataToSend.append('features[petFriendly]', String(currentFormData.features.petFriendly))
+        formDataToSend.append('features[parking]', String(currentFormData.features.parking))
+        formDataToSend.append('features[balcony]', String(currentFormData.features.balcony))
+        formDataToSend.append('utilities[electricity]', String(currentFormData.utilities.electricity))
+        formDataToSend.append('utilities[water]', String(currentFormData.utilities.water))
+        formDataToSend.append('utilities[internet]', String(currentFormData.utilities.internet))
+        formDataToSend.append('utilities[gas]', String(currentFormData.utilities.gas))
+        currentSelectedImages.forEach(file => {
+          formDataToSend.append('images', file)
+        })
+        // Debug: log all FormData entries
+        console.log('[UpdateProperty] FormData entries:')
+        for (let pair of formDataToSend.entries()) {
+          console.log('[UpdateProperty] FormData', pair[0], pair[1])
+        }
+        response = await propertiesApi.update(currentEditingProperty._id.toString(), formDataToSend)
+      } else {
+        // Use JSON for update if no new images
+        const updateData = {
+          ...currentFormData,
+          rent: Number(currentFormData.rent),
+          bedrooms: Number(currentFormData.bedrooms),
+          bathrooms: Number(currentFormData.bathrooms),
+          size: currentFormData.size ? Number(currentFormData.size) : undefined,
+        }
+        console.log('[UpdateProperty] Sending JSON update data:', updateData)
+        response = await propertiesApi.update(currentEditingProperty._id.toString(), updateData)
+      }
+      
+      console.log('[UpdateProperty] API response:', response)
+      
       if (response.success) {
         toast({
           title: "Property Updated!",
           description: "Property has been successfully updated.",
           variant: "default",
         })
+        // Only reset form and state after successful update
         setShowAddProperty(false)
         setEditingProperty(null)
         resetForm()
@@ -217,11 +319,15 @@ export default function PropertyManagerDashboard() {
         })
       }
     } catch (err) {
+      console.error("Update property error:", err)
       toast({
         title: "Error",
         description: "Failed to update property",
         variant: "destructive",
       })
+    } finally {
+      setIsSubmitting(false)
+      setUploadingImages(false)
     }
   }
 
@@ -305,10 +411,10 @@ export default function PropertyManagerDashboard() {
 
   // Image upload handlers
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    console.log("File input changed:", e.target.files) // Debug log
+    console.log("File input changed (handleImageSelect):", e.target.files)
     const files = Array.from(e.target.files || [])
     if (files.length > 0) {
-      console.log("Selected files:", files) // Debug log
+      console.log("Selected files (handleImageSelect):", files)
       setSelectedImages(prev => [...prev, ...files])
       
       // Create preview URLs
@@ -395,7 +501,401 @@ export default function PropertyManagerDashboard() {
     setEditingProperty(null)
   }
 
-  if (showAddProperty) {
+  console.log('[Dashboard] Render', { user, loading, error, isLoading: isLoading })
+
+  // Wait for authentication to complete
+  if (isLoading) {
+    console.log('[Dashboard] AuthContext still loading, showing spinner')
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-gray-900"></div>
+      </div>
+    )
+  }
+
+  // Check if user is logged in
+  if (!user) {
+    console.log('[Dashboard] No user found, showing login message')
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-xl font-semibold mb-2">You must be logged in as a landlord to view this dashboard.</h2>
+          <p className="text-gray-500">Please log in and try again.</p>
+        </div>
+      </div>
+    )
+  }
+
+  console.log('[Dashboard] User found, checking if loading properties')
+  
+  // Show loading while fetching properties
+  if (loading) {
+    console.log('[Dashboard] Loading properties, showing spinner')
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-gray-900"></div>
+      </div>
+    )
+  }
+
+  if (showAddProperty && editingProperty) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        {/* Header */}
+        <header className="bg-white border-b border-gray-200 px-6 py-4">
+          <div className="flex items-center justify-between max-w-7xl mx-auto">
+            <div className="flex items-center space-x-4">
+              <Button variant="ghost" onClick={() => {
+                setShowAddProperty(false)
+                setEditingProperty(null)
+                resetForm()
+              }}>
+                ← Back to Dashboard
+              </Button>
+              <h1 className="text-2xl font-bold text-gray-900">
+                Edit Property
+              </h1>
+            </div>
+          </div>
+        </header>
+
+        <div className="max-w-4xl mx-auto px-6 py-8">
+          <Card>
+            <CardHeader>
+              <CardTitle>Property Details</CardTitle>
+              <CardDescription>Fill in the details of your property to attract the right tenants</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <form onSubmit={handleCreateProperty}>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="title">Property Title</Label>
+                    <Input 
+                      id="title" 
+                      placeholder="e.g., Modern 2-Bedroom Apartment"
+                      value={formData.title}
+                      onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="rent">Annual Rent (₦)</Label>
+                    <Input 
+                      id="rent" 
+                      placeholder="850000" 
+                      type="number"
+                      value={formData.rent}
+                      onChange={(e) => setFormData(prev => ({ ...prev, rent: e.target.value }))}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="city">Location</Label>
+                  <Select 
+                    value={formData.location.city} 
+                    onValueChange={(value) => setFormData(prev => ({ 
+                      ...prev, 
+                      location: { ...prev.location, city: value }
+                    }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select location" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Victoria Island">Victoria Island</SelectItem>
+                      <SelectItem value="Lekki">Lekki</SelectItem>
+                      <SelectItem value="Ikeja">Ikeja</SelectItem>
+                      <SelectItem value="Surulere">Surulere</SelectItem>
+                      <SelectItem value="Yaba">Yaba</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="address">Address</Label>
+                    <Input 
+                      id="address" 
+                      placeholder="Enter full address"
+                      value={formData.location.address}
+                      onChange={(e) => setFormData(prev => ({ 
+                        ...prev, 
+                        location: { ...prev.location, address: e.target.value }
+                      }))}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="state">State</Label>
+                    <Input 
+                      id="state" 
+                      placeholder="Lagos"
+                      value={formData.location.state}
+                      onChange={(e) => setFormData(prev => ({ 
+                        ...prev, 
+                        location: { ...prev.location, state: e.target.value }
+                      }))}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="bedrooms">Bedrooms</Label>
+                    <Select 
+                      value={formData.bedrooms} 
+                      onValueChange={(value) => setFormData(prev => ({ ...prev, bedrooms: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">1 Bedroom</SelectItem>
+                        <SelectItem value="2">2 Bedrooms</SelectItem>
+                        <SelectItem value="3">3 Bedrooms</SelectItem>
+                        <SelectItem value="4">4+ Bedrooms</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bathrooms">Bathrooms</Label>
+                    <Select 
+                      value={formData.bathrooms} 
+                      onValueChange={(value) => setFormData(prev => ({ ...prev, bathrooms: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">1 Bathroom</SelectItem>
+                        <SelectItem value="2">2 Bathrooms</SelectItem>
+                        <SelectItem value="3">3 Bathrooms</SelectItem>
+                        <SelectItem value="4">4+ Bathrooms</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="size">Size (sqm)</Label>
+                    <Input 
+                      id="size" 
+                      placeholder="120" 
+                      type="number"
+                      value={formData.size}
+                      onChange={(e) => setFormData(prev => ({ ...prev, size: e.target.value }))}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="description">Description</Label>
+                  <Textarea
+                    id="description"
+                    placeholder="Describe your property, its features, and what makes it special..."
+                    rows={4}
+                    value={formData.description}
+                    onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                    required
+                  />
+                  <div className="flex justify-between text-sm">
+                    <span className={`${formData.description.length < 20 ? 'text-red-500' : 'text-gray-500'}`}>
+                      {formData.description.length < 20 ? `${20 - formData.description.length} more characters needed` : 'Minimum length met'}
+                    </span>
+                    <span className="text-gray-500">{formData.description.length}/2000</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Amenities</Label>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {[
+                      { id: "wifi", label: "WiFi", icon: Wifi },
+                      { id: "parking", label: "Parking", icon: Car },
+                      { id: "security", label: "Security", icon: Shield },
+                      { id: "generator", label: "Generator", icon: Zap },
+                    ].map((amenity) => (
+                      <div key={amenity.id} className="flex items-center space-x-2">
+                        <input 
+                          type="checkbox" 
+                          id={amenity.id} 
+                          className="rounded"
+                          checked={formData.amenities.includes(amenity.id)}
+                          onChange={(e) => handleAmenityChange(amenity.id, e.target.checked)}
+                        />
+                        <Label htmlFor={amenity.id} className="flex items-center cursor-pointer">
+                          <amenity.icon className="h-4 w-4 mr-2" />
+                          {amenity.label}
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Features</Label>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {[
+                      { id: "furnished", label: "Furnished" },
+                      { id: "petFriendly", label: "Pet Friendly" },
+                      { id: "parking", label: "Parking" },
+                      { id: "balcony", label: "Balcony" },
+                    ].map((feature) => (
+                      <div key={feature.id} className="flex items-center space-x-2">
+                        <input 
+                          type="checkbox" 
+                          id={feature.id} 
+                          className="rounded"
+                          checked={formData.features[feature.id as keyof typeof formData.features]}
+                          onChange={(e) => handleFeatureChange(feature.id as keyof typeof formData.features, e.target.checked)}
+                        />
+                        <Label htmlFor={feature.id} className="cursor-pointer">
+                          {feature.label}
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Utilities Included</Label>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {[
+                      { id: "electricity", label: "Electricity" },
+                      { id: "water", label: "Water" },
+                      { id: "internet", label: "Internet" },
+                      { id: "gas", label: "Gas" },
+                    ].map((utility) => (
+                      <div key={utility.id} className="flex items-center space-x-2">
+                        <input 
+                          type="checkbox" 
+                          id={utility.id} 
+                          className="rounded"
+                          checked={formData.utilities[utility.id as keyof typeof formData.utilities]}
+                          onChange={(e) => handleUtilityChange(utility.id as keyof typeof formData.utilities, e.target.checked)}
+                        />
+                        <Label htmlFor={utility.id} className="cursor-pointer">
+                          {utility.label}
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Property Images</Label>
+                  <div className="space-y-4">
+                    {/* Image upload input */}
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
+                      <div className="space-y-2">
+                        <div className="text-gray-500">
+                          <svg className="mx-auto h-12 w-12" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                            <path
+                              d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          <input
+                            type="file"
+                            multiple
+                            accept="image/*"
+                            onChange={handleImageSelect}
+                            className="hidden"
+                            id="image-upload"
+                          />
+                          <label htmlFor="image-upload" className="cursor-pointer inline-block">
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              type="button" 
+                              className="hover:bg-blue-50 border-blue-300 text-blue-700"
+                              onClick={() => {
+                                const fileInput = document.getElementById('image-upload') as HTMLInputElement
+                                if (fileInput) {
+                                  fileInput.click()
+                                }
+                              }}
+                            >
+                              📁 Choose Images
+                            </Button>
+                          </label>
+                          <p className="mt-1">or drag and drop images here</p>
+                        </div>
+                        <p className="text-xs text-gray-500">PNG, JPG, GIF up to 5MB each (max 10 images)</p>
+                        {selectedImages.length > 0 && (
+                          <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded">
+                            <p className="text-sm text-blue-700 font-medium">
+                              ✅ {selectedImages.length} image(s) selected
+                            </p>
+                            <p className="text-xs text-blue-600">
+                              Click "Update Property" to upload and create your listing
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Image previews */}
+                    {imagePreviewUrls.length > 0 && (
+                      <div className="space-y-2">
+                        <Label>Selected Images ({selectedImages.length})</Label>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          {imagePreviewUrls.map((url, index) => (
+                            <div key={index} className="relative group">
+                              <img
+                                src={url}
+                                alt={`Preview ${index + 1}`}
+                                className="w-full h-24 object-cover rounded-lg"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removeImage(index)}
+                                className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                                title="Remove image"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex space-x-4">
+                  <Button type="submit" className="flex-1" disabled={uploadingImages || isSubmitting || isUpdateDisabled}>
+                    {uploadingImages || isSubmitting ? (
+                      <>
+                        <LoadingSpinner size="sm" className="mr-2" />
+                        Updating Property...
+                      </>
+                    ) : (
+                      "Update Property"
+                    )}
+                  </Button>
+                  <Button variant="outline" onClick={() => {
+                    setShowAddProperty(false)
+                    resetForm()
+                  }}>
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    )
+  }
+
+  // Only show the add property form if not editing
+  if (showAddProperty && !editingProperty) {
     return (
       <div className="min-h-screen bg-gray-50">
         {/* Header */}
@@ -409,7 +909,7 @@ export default function PropertyManagerDashboard() {
                 ← Back to Dashboard
               </Button>
               <h1 className="text-2xl font-bold text-gray-900">
-                {editingProperty ? "Edit Property" : "Add New Property"}
+                Add New Property
               </h1>
             </div>
           </div>
@@ -725,14 +1225,14 @@ export default function PropertyManagerDashboard() {
                 </div>
 
                 <div className="flex space-x-4">
-                  <Button type="submit" className="flex-1" disabled={uploadingImages}>
-                    {uploadingImages ? (
+                  <Button type="submit" className="flex-1" disabled={uploadingImages || isSubmitting || isUpdateDisabled}>
+                    {uploadingImages || isSubmitting ? (
                       <>
                         <LoadingSpinner size="sm" className="mr-2" />
-                        {editingProperty ? "Updating Property..." : "Creating Property..."}
+                        Creating Property...
                       </>
                     ) : (
-                      editingProperty ? "Update Property" : "List Property"
+                      "List Property"
                     )}
                   </Button>
                   <Button variant="outline" onClick={() => {
@@ -750,10 +1250,13 @@ export default function PropertyManagerDashboard() {
     )
   }
 
-  if (loading) {
+  if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <LoadingSpinner size="lg" />
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+          <strong className="font-bold">Error: </strong>
+          <span className="block sm:inline">{error}</span>
+        </div>
       </div>
     )
   }
@@ -791,12 +1294,6 @@ export default function PropertyManagerDashboard() {
           <h2 className="text-3xl font-bold text-gray-900 mb-2">Property Manager Dashboard</h2>
           <p className="text-gray-600">Manage your properties and connect with potential tenants</p>
         </div>
-
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-red-800">{error}</p>
-          </div>
-        )}
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
