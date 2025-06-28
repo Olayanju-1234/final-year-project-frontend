@@ -8,16 +8,14 @@ import { Badge } from "@/components/ui/badge"
 import {
   Home,
   Search,
-  Shield,
   TrendingUp,
   CheckCircle,
-  Star,
   MapPin,
   Clock,
   ArrowRight,
-  Play,
   Menu,
   X,
+  Calculator,
 } from "lucide-react"
 
 export default function LandingPage() {
@@ -26,58 +24,23 @@ export default function LandingPage() {
 
   const features = [
     {
-      icon: Search,
-      title: "Smart Matching Algorithm",
+      icon: Calculator,
+      title: "Linear Programming Optimization",
       description:
-        "Our AI-powered system matches tenants with properties based on budget, location, and preferences with 90%+ accuracy.",
-    },
-    {
-      icon: Shield,
-      title: "Secure & Trusted",
-      description:
-        "Bank-level security protects your data. Verified properties and landlords ensure safe transactions.",
+        "Our advanced mathematical optimization system matches tenants with properties based on budget, location, and preferences with 90%+ accuracy.",
     },
     {
       icon: Clock,
       title: "Save Time",
-      description: "Find your perfect home in minutes, not months. Our algorithm eliminates endless property searches.",
-    },
-    {
-      icon: TrendingUp,
-      title: "Market Analytics",
-      description: "Get insights into rental trends, pricing, and market dynamics to make informed decisions.",
-    },
-  ]
-
-  const testimonials = [
-    {
-      name: "Adebayo Johnson",
-      role: "Software Engineer",
-      image: "/placeholder.svg?height=60&width=60",
-      content: "Found my dream apartment in Victoria Island within 2 days! The matching was incredibly accurate.",
-      rating: 5,
-    },
-    {
-      name: "Mrs. Folake Adeyemi",
-      role: "Property Manager",
-      image: "/placeholder.svg?height=60&width=60",
-      content: "Reduced my vacancy period from 6 months to 2 weeks. This platform is a game-changer!",
-      rating: 5,
-    },
-    {
-      name: "Chinedu Okafor",
-      role: "Marketing Executive",
-      image: "/placeholder.svg?height=60&width=60",
-      content: "The transparency and detailed matching explanations helped me make the right choice.",
-      rating: 5,
+      description: "Find your perfect home in minutes, not months. Our optimization algorithm eliminates endless property searches.",
     },
   ]
 
   const stats = [
-    { number: "10,000+", label: "Properties Listed" },
-    { number: "5,000+", label: "Happy Tenants" },
-    { number: "92%", label: "Match Accuracy" },
-    { number: "2 Days", label: "Average Match Time" },
+    { number: "50+", label: "Properties Listed" },
+    { number: "25+", label: "Successful Matches" },
+    { number: "95%", label: "Match Accuracy" },
+    { number: "<30s", label: "Optimization Time" },
   ]
 
   return (
@@ -98,12 +61,6 @@ export default function LandingPage() {
               </a>
               <a href="#how-it-works" className="text-gray-600 hover:text-blue-600 transition-colors">
                 How it Works
-              </a>
-              <a href="#testimonials" className="text-gray-600 hover:text-blue-600 transition-colors">
-                Testimonials
-              </a>
-              <a href="#pricing" className="text-gray-600 hover:text-blue-600 transition-colors">
-                Pricing
               </a>
             </div>
 
@@ -131,12 +88,6 @@ export default function LandingPage() {
               <a href="#how-it-works" className="block px-3 py-2 text-gray-600">
                 How it Works
               </a>
-              <a href="#testimonials" className="block px-3 py-2 text-gray-600">
-                Testimonials
-              </a>
-              <a href="#pricing" className="block px-3 py-2 text-gray-600">
-                Pricing
-              </a>
               <div className="px-3 py-2 space-y-2">
                 <Button variant="ghost" className="w-full" onClick={() => { setIsMenuOpen(false); router.push("/auth-pages?mode=login") }}>Sign In</Button>
                 <Button className="w-full" onClick={() => { setIsMenuOpen(false); router.push("/auth-pages?mode=signup") }}>Get Started</Button>
@@ -152,30 +103,26 @@ export default function LandingPage() {
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div>
               <Badge className="mb-4 bg-blue-100 text-blue-800 hover:bg-blue-100">
-                🚀 Revolutionizing Nigeria's Rental Market
+                🎓 Final Year Project - Linear Programming Optimization
               </Badge>
               <h1 className="text-4xl lg:text-6xl font-bold text-gray-900 mb-6">
                 Find Your Perfect
                 <span className="text-blue-600 block">Home in Minutes</span>
               </h1>
               <p className="text-xl text-gray-600 mb-8 leading-relaxed">
-                Our AI-powered matching system connects tenants with ideal properties based on budget, location, and
+                Our linear programming optimization system connects tenants with ideal properties based on budget, location, and
                 preferences. Say goodbye to endless property searches.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 mb-8">
-                <Button size="lg" className="text-lg px-8 py-3">
+                <Button size="lg" className="text-lg px-8 py-3" onClick={() => router.push("/auth-pages?mode=signup")}>
                   Start Finding Homes
                   <ArrowRight className="ml-2 h-5 w-5" />
-                </Button>
-                <Button variant="outline" size="lg" className="text-lg px-8 py-3">
-                  <Play className="mr-2 h-5 w-5" />
-                  Watch Demo
                 </Button>
               </div>
               <div className="flex items-center space-x-6 text-sm text-gray-600">
                 <div className="flex items-center">
                   <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
-                  Free to use
+                  Linear Programming
                 </div>
                 <div className="flex items-center">
                   <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
@@ -215,6 +162,10 @@ export default function LandingPage() {
       {/* Stats Section */}
       <section className="py-16 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">Project Demonstration Stats</h2>
+            <p className="text-gray-600">Current performance metrics of the optimization model</p>
+          </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
             {stats.map((stat, index) => (
               <div key={index} className="text-center">
@@ -236,7 +187,7 @@ export default function LandingPage() {
               periods for everyone.
             </p>
           </div>
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="grid md:grid-cols-2 gap-8">
             {features.map((feature, index) => (
               <Card key={index} className="border-0 shadow-lg hover:shadow-xl transition-shadow">
                 <CardContent className="p-6 text-center">
@@ -272,7 +223,7 @@ export default function LandingPage() {
                 2
               </div>
               <h3 className="text-xl font-semibold text-gray-900 mb-3">Get Smart Matches</h3>
-              <p className="text-gray-600">Our AI algorithm finds properties that perfectly match your criteria</p>
+              <p className="text-gray-600">Our optimization algorithm finds properties that perfectly match your criteria</p>
             </div>
             <div className="text-center">
               <div className="bg-blue-600 text-white w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4 text-xl font-bold">
@@ -285,56 +236,21 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Testimonials */}
-      <section id="testimonials" className="py-20 bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">What Our Users Say</h2>
-            <p className="text-xl text-gray-600">Join thousands of satisfied tenants and landlords</p>
-          </div>
-          <div className="grid md:grid-cols-3 gap-8">
-            {testimonials.map((testimonial, index) => (
-              <Card key={index} className="border-0 shadow-lg">
-                <CardContent className="p-6">
-                  <div className="flex items-center mb-4">
-                    {[...Array(testimonial.rating)].map((_, i) => (
-                      <Star key={i} className="h-5 w-5 text-yellow-400 fill-current" />
-                    ))}
-                  </div>
-                  <p className="text-gray-600 mb-6 italic">"{testimonial.content}"</p>
-                  <div className="flex items-center">
-                    <img
-                      src={testimonial.image || "/placeholder.svg"}
-                      alt={testimonial.name}
-                      className="w-12 h-12 rounded-full mr-4"
-                    />
-                    <div>
-                      <div className="font-semibold text-gray-900">{testimonial.name}</div>
-                      <div className="text-sm text-gray-600">{testimonial.role}</div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* CTA Section */}
       <section className="py-20 bg-blue-600">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-3xl lg:text-4xl font-bold text-white mb-4">Ready to Find Your Perfect Home?</h2>
           <p className="text-xl text-blue-100 mb-8 max-w-2xl mx-auto">
-            Join thousands of Nigerians who have found their ideal properties through our smart matching system.
+            Experience how linear programming optimization can revolutionize property matching in Nigeria's rental market.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button size="lg" variant="secondary" className="text-lg px-8 py-3">
+            <Button size="lg" variant="secondary" className="text-lg px-8 py-3" onClick={() => router.push("/auth-pages?mode=signup")}>
               Start as Tenant
             </Button>
             <Button
               size="lg"
-              variant="outline"
-              className="text-lg px-8 py-3 text-white border-white hover:bg-white hover:text-blue-600"
+              variant="secondary"
+              className="text-lg px-8 py-3 bg-white text-blue-600 hover:bg-gray-100"
             >
               List Your Property
             </Button>
@@ -345,94 +261,13 @@ export default function LandingPage() {
       {/* Footer */}
       <footer className="bg-gray-900 text-white py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid md:grid-cols-4 gap-8">
-            <div>
-              <div className="flex items-center space-x-2 mb-4">
-                <Home className="h-8 w-8 text-blue-400" />
-                <span className="text-2xl font-bold">RentMatch</span>
-              </div>
-              <p className="text-gray-400">
-                Revolutionizing Nigeria's rental market through smart technology and optimization.
-              </p>
+          <div className="text-center">
+            <div className="flex items-center justify-center space-x-2 mb-4">
+              <Home className="h-8 w-8 text-blue-400" />
+              <span className="text-2xl font-bold">RentMatch</span>
             </div>
-            <div>
-              <h3 className="font-semibold mb-4">Product</h3>
-              <ul className="space-y-2 text-gray-400">
-                <li>
-                  <a href="#" className="hover:text-white transition-colors">
-                    Features
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white transition-colors">
-                    How it Works
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white transition-colors">
-                    Pricing
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white transition-colors">
-                    API
-                  </a>
-                </li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="font-semibold mb-4">Company</h3>
-              <ul className="space-y-2 text-gray-400">
-                <li>
-                  <a href="#" className="hover:text-white transition-colors">
-                    About
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white transition-colors">
-                    Blog
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white transition-colors">
-                    Careers
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white transition-colors">
-                    Contact
-                  </a>
-                </li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="font-semibold mb-4">Support</h3>
-              <ul className="space-y-2 text-gray-400">
-                <li>
-                  <a href="#" className="hover:text-white transition-colors">
-                    Help Center
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white transition-colors">
-                    Privacy Policy
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white transition-colors">
-                    Terms of Service
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-white transition-colors">
-                    Security
-                  </a>
-                </li>
-              </ul>
-            </div>
-          </div>
-          <div className="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400">
-            <p>&copy; 2024 RentMatch. All rights reserved. Built for Nigeria's rental market.</p>
+            <p className="text-gray-400 mb-4">Final Year Project - Optimization Model for Tenant-Property Matching</p>
+            <p className="text-gray-500 text-sm">Built with Linear Programming • University Project • 2025</p>
           </div>
         </div>
       </footer>

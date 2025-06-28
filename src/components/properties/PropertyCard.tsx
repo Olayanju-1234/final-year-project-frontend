@@ -1,11 +1,44 @@
 "use client"
 
-import { Card } from "@/components/ui/card"
+import React from "react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { MapPin, Bed, Bath, Eye, Heart } from "lucide-react"
-import type { Property, PropertyMatch } from "@/lib/api"
+
+// Define types locally since they're not exported from the API
+interface Property {
+  id: string
+  title: string
+  location: string
+  rent: number
+  bedrooms: number
+  bathrooms: number
+  amenities: string[]
+  description: string
+  images: string[]
+  landlordId: string
+  landlordName: string
+  landlordContact: { phone: string; email: string }
+  status: string
+  createdAt: string
+  updatedAt: string
+  size?: number
+}
+
+interface PropertyMatch {
+  propertyId: string
+  tenantId: string
+  matchScore: number
+  matchDetails: {
+    budgetScore: number
+    locationScore: number
+    amenityScore: number
+    sizeScore: number
+  }
+  explanation: string[]
+}
 
 interface PropertyCardProps {
   property: Property
@@ -64,7 +97,7 @@ export function PropertyCard({ property, match, onView, onContact, showMatchScor
           </div>
 
           <div className="flex flex-wrap gap-2 mb-4">
-            {property.amenities.slice(0, 4).map((amenity) => (
+            {property.amenities.slice(0, 4).map((amenity: string) => (
               <Badge key={amenity} variant="outline" className="text-xs">
                 {amenity}
               </Badge>
@@ -82,7 +115,7 @@ export function PropertyCard({ property, match, onView, onContact, showMatchScor
             <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
               <h5 className="font-medium text-green-800 mb-2">Why this matches you:</h5>
               <ul className="text-sm text-green-700 space-y-1">
-                {match.explanation.slice(0, 2).map((reason, index) => (
+                {match.explanation.slice(0, 2).map((reason: string, index: number) => (
                   <li key={index} className="flex items-start">
                     <span className="text-green-500 mr-2">•</span>
                     {reason}

@@ -1,6 +1,7 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
+import { useSearchParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -11,8 +12,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Home, Mail, Lock, User, Phone, MapPin, Eye, EyeOff, ArrowLeft, Terminal } from "lucide-react"
 import { useAuth } from "@/src/context/AuthContext"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { useToast } from "@/hooks/use-toast"
 
 export default function AuthPages() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const { toast } = useToast()
   const [showPassword, setShowPassword] = useState(false)
   const [userType, setUserType] = useState<"tenant" | "landlord">("tenant")
   const [currentView, setCurrentView] = useState("auth") // auth, forgot-password
@@ -26,6 +31,16 @@ export default function AuthPages() {
   const [password, setPassword] = useState("")
   const [phone, setPhone] = useState("")
 
+  // Set initial auth mode based on URL parameter
+  useEffect(() => {
+    const mode = searchParams?.get("mode")
+    if (mode === "signup" || mode === "register") {
+      setAuthMode("register")
+    } else if (mode === "login") {
+      setAuthMode("login")
+    }
+  }, [searchParams])
+
   const handleAuthAction = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
@@ -33,14 +48,42 @@ export default function AuthPages() {
     try {
       if (authMode === "login") {
         await login({ email, password })
+        // Show success toast for login
+        toast({
+          title: "Login Successful!",
+          description: "Welcome back to RentMatch. Redirecting you to your dashboard...",
+          variant: "default",
+        })
       } else {
         await register({ name, email, password, phone, userType })
+        // Show success toast for registration
+        toast({
+          title: "Registration Successful!",
+          description: `Welcome to RentMatch! Your ${userType} account has been created successfully.`,
+          variant: "default",
+        })
       }
     } catch (err: any) {
       setError(err.message || "An error occurred.")
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const toggleAuthMode = () => {
+    const newMode = authMode === "login" ? "register" : "login";
+    setAuthMode(newMode);
+    
+    // Update the URL to reflect the new mode
+    const newModeParam = newMode === "register" ? "signup" : "login";
+    router.push(`/auth-pages?mode=${newModeParam}`);
+    
+    // Clear form data when switching modes
+    setName("")
+    setEmail("")
+    setPassword("")
+    setPhone("")
+    setError(null)
   }
 
   if (currentView === "forgot-password") {
@@ -157,7 +200,7 @@ export default function AuthPages() {
           </form>
           <div className="mt-4 text-center text-sm">
             {authMode === "login" ? "Don't have an account? " : "Already have an account? "}
-            <Button variant="link" onClick={() => setAuthMode(authMode === "login" ? "register" : "login")} className="p-0">
+            <Button variant="link" onClick={toggleAuthMode} className="p-0">
               {authMode === "login" ? "Sign up" : "Sign in"}
             </Button>
           </div>

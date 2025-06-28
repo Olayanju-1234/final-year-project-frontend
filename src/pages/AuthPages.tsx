@@ -2,7 +2,8 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useSearchParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -10,19 +11,40 @@ import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { LoadingSpinner } from "@/components/ui/loading-spinner"
-import { useApiMutation } from "@/hooks/useApi"
-import { authApi } from "@/lib/api"
+import { LoadingSpinner } from "@/src/components/ui/loading-spinner"
+import { useApiMutation } from "@/src/hooks/useApi"
+import { loginUser, registerUser } from "@/src/lib/api"
+import { useToast } from "@/hooks/use-toast"
 import { Home, Mail, Lock, User, Phone, MapPin, Eye, EyeOff, ArrowLeft } from "lucide-react"
 
 export default function AuthPages() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const { toast } = useToast()
   const [showPassword, setShowPassword] = useState(false)
   const [userType, setUserType] = useState("tenant")
   const [currentView, setCurrentView] = useState("auth")
+  const [defaultTab, setDefaultTab] = useState("signin")
+
+  // Set initial tab based on URL parameter
+  useEffect(() => {
+    const mode = searchParams?.get("mode")
+    if (mode === "signup" || mode === "register") {
+      setDefaultTab("signup")
+    } else if (mode === "login") {
+      setDefaultTab("signin")
+    }
+  }, [searchParams])
 
   // TODO: Connect to your backend auth endpoints
-  const { mutate: login, loading: loginLoading, error: loginError } = useApiMutation(authApi.login)
-  const { mutate: register, loading: registerLoading, error: registerError } = useApiMutation(authApi.register)
+  const { mutate: login, loading: loginLoading, error: loginError } = useApiMutation(loginUser)
+  const { mutate: register, loading: registerLoading, error: registerError } = useApiMutation(registerUser)
+
+  const handleTabChange = (value: string) => {
+    // Update the URL to reflect the new tab
+    const newModeParam = value === "signup" ? "signup" : "login";
+    router.push(`/auth-pages?mode=${newModeParam}`);
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -32,6 +54,13 @@ export default function AuthPages() {
 
     const result = await login({ email, password })
     if (result) {
+      // Show success toast
+      toast({
+        title: "Login Successful!",
+        description: "Welcome back to RentMatch. Redirecting you to your dashboard...",
+        variant: "default",
+      })
+      
       // TODO: Handle successful login (store token, redirect, etc.)
       console.log("Login successful:", result)
     }
@@ -57,6 +86,13 @@ export default function AuthPages() {
 
     const result = await register(userData)
     if (result) {
+      // Show success toast
+      toast({
+        title: "Registration Successful!",
+        description: `Welcome to RentMatch! Your ${userType} account has been created successfully.`,
+        variant: "default",
+      })
+      
       // TODO: Handle successful registration
       console.log("Registration successful:", result)
     }
@@ -130,7 +166,7 @@ export default function AuthPages() {
           <CardDescription>Linear Programming Optimization for Property Matching</CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="signin" className="space-y-4">
+          <Tabs defaultValue={defaultTab} className="space-y-4" onValueChange={handleTabChange}>
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="signin">Sign In</TabsTrigger>
               <TabsTrigger value="signup">Sign Up</TabsTrigger>

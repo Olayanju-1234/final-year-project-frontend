@@ -235,7 +235,7 @@ export default function LandingPage() {
               <span className="text-2xl font-bold">RentMatch</span>
             </div>
             <p className="text-gray-400 mb-4">Final Year Project - Optimization Model for Tenant-Property Matching</p>
-            <p className="text-gray-500 text-sm">Built with Linear Programming • University Project • 2024</p>
+            <p className="text-gray-500 text-sm">Built with Linear Programming • University Project • 2025</p>
           </div>
         </div>
       </footer>
