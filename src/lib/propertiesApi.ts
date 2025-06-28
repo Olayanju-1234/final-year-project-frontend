@@ -39,7 +39,13 @@ export const propertiesApi = {
 
   update: async (id: string, propertyData: Partial<IProperty> | FormData): Promise<ApiResponse<IProperty>> => {
     let response
-    response = await apiClient.put<ApiResponse<IProperty>>(`/properties/${id}`, propertyData)
+    if (propertyData instanceof FormData) {
+      response = await apiClient.put<ApiResponse<IProperty>>(`/properties/${id}`, propertyData, {
+        headers: {}, // Let Axios/browser set Content-Type
+      })
+    } else {
+      response = await apiClient.put<ApiResponse<IProperty>>(`/properties/${id}`, propertyData)
+    }
     return response.data
   },
 

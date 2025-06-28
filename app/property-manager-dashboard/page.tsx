@@ -96,6 +96,26 @@ export default function PropertyManagerDashboard() {
   const [uploadingImages, setUploadingImages] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  // Add new state at the top of the component
+  const [existingImages, setExistingImages] = useState<string[]>([]);
+  const [imagesToKeep, setImagesToKeep] = useState<string[]>([]);
+  const [imagesToDelete, setImagesToDelete] = useState<string[]>([]);
+
+  // Image removal functions
+  const removeExistingImage = (url: string) => {
+    setImagesToKeep(prev => prev.filter(img => img !== url));
+    setImagesToDelete(prev => [...prev, url]);
+  };
+
+  const removeNewImage = (index: number) => {
+    setSelectedImages(prev => prev.filter((_, i) => i !== index));
+    setImagePreviewUrls(prev => {
+      const newUrls = prev.filter((_, i) => i !== index);
+      URL.revokeObjectURL(prev[index]);
+      return newUrls;
+    });
+  };
+
   // Fetch properties on component mount
   useEffect(() => {
     if (user && !isLoading) {
@@ -208,15 +228,7 @@ export default function PropertyManagerDashboard() {
   const handleUpdateProperty = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!editingProperty) return
-
-    // Prevent multiple submissions
-    if (isSubmitting) {
-      console.log('[UpdateProperty] Already submitting, ignoring request')
-      return
-    }
-
-    console.log('[UpdateProperty] Starting update with formData:', formData)
-    console.log('[UpdateProperty] editingProperty:', editingProperty)
+    if (isSubmitting) return
 
     // Validation: prevent submitting if required fields are empty or invalid
     if (
@@ -239,64 +251,48 @@ export default function PropertyManagerDashboard() {
       return
     }
 
-    // Store the current form data to prevent race conditions
     const currentFormData = { ...formData }
     const currentEditingProperty = editingProperty
     const currentSelectedImages = [...selectedImages]
-
-    console.log('[UpdateProperty] Captured current form data:', currentFormData)
-    console.log('[UpdateProperty] Captured editing property:', currentEditingProperty)
+    const currentImagesToKeep = [...imagesToKeep]
+    const currentImagesToDelete = [...imagesToDelete]
 
     try {
       setIsSubmitting(true)
       setUploadingImages(true)
       let response
       
-      if (currentSelectedImages.length > 0) {
-        // Use FormData for image upload
-        const formDataToSend = new FormData()
-        formDataToSend.append('title', String(currentFormData.title))
-        formDataToSend.append('description', String(currentFormData.description))
-        formDataToSend.append('rent', String(currentFormData.rent))
-        formDataToSend.append('bedrooms', String(currentFormData.bedrooms))
-        formDataToSend.append('bathrooms', String(currentFormData.bathrooms))
-        formDataToSend.append('size', String(currentFormData.size))
-        formDataToSend.append('location[address]', String(currentFormData.location.address))
-        formDataToSend.append('location[city]', String(currentFormData.location.city))
-        formDataToSend.append('location[state]', String(currentFormData.location.state))
-        // Append amenities as multiple entries
-        currentFormData.amenities.forEach(amenity => {
-          formDataToSend.append('amenities', String(amenity))
-        })
-        formDataToSend.append('features[furnished]', String(currentFormData.features.furnished))
-        formDataToSend.append('features[petFriendly]', String(currentFormData.features.petFriendly))
-        formDataToSend.append('features[parking]', String(currentFormData.features.parking))
-        formDataToSend.append('features[balcony]', String(currentFormData.features.balcony))
-        formDataToSend.append('utilities[electricity]', String(currentFormData.utilities.electricity))
-        formDataToSend.append('utilities[water]', String(currentFormData.utilities.water))
-        formDataToSend.append('utilities[internet]', String(currentFormData.utilities.internet))
-        formDataToSend.append('utilities[gas]', String(currentFormData.utilities.gas))
-        currentSelectedImages.forEach(file => {
-          formDataToSend.append('images', file)
-        })
-        // Debug: log all FormData entries
-        console.log('[UpdateProperty] FormData entries:')
-        for (let pair of formDataToSend.entries()) {
-          console.log('[UpdateProperty] FormData', pair[0], pair[1])
-        }
-        response = await propertiesApi.update(currentEditingProperty._id.toString(), formDataToSend)
-      } else {
-        // Use JSON for update if no new images
-        const updateData = {
-          ...currentFormData,
-          rent: Number(currentFormData.rent),
-          bedrooms: Number(currentFormData.bedrooms),
-          bathrooms: Number(currentFormData.bathrooms),
-          size: currentFormData.size ? Number(currentFormData.size) : undefined,
-        }
-        console.log('[UpdateProperty] Sending JSON update data:', updateData)
-        response = await propertiesApi.update(currentEditingProperty._id.toString(), updateData)
-      }
+      const formDataToSend = new FormData()
+      formDataToSend.append('title', String(currentFormData.title))
+      formDataToSend.append('description', String(currentFormData.description))
+      formDataToSend.append('rent', String(currentFormData.rent))
+      formDataToSend.append('bedrooms', String(currentFormData.bedrooms))
+      formDataToSend.append('bathrooms', String(currentFormData.bathrooms))
+      formDataToSend.append('size', String(currentFormData.size))
+      formDataToSend.append('location[address]', String(currentFormData.location.address))
+      formDataToSend.append('location[city]', String(currentFormData.location.city))
+      formDataToSend.append('location[state]', String(currentFormData.location.state))
+      currentFormData.amenities.forEach(amenity => {
+        formDataToSend.append('amenities', String(amenity))
+      })
+      formDataToSend.append('features[furnished]', String(currentFormData.features.furnished))
+      formDataToSend.append('features[petFriendly]', String(currentFormData.features.petFriendly))
+      formDataToSend.append('features[parking]', String(currentFormData.features.parking))
+      formDataToSend.append('features[balcony]', String(currentFormData.features.balcony))
+      formDataToSend.append('utilities[electricity]', String(currentFormData.utilities.electricity))
+      formDataToSend.append('utilities[water]', String(currentFormData.utilities.water))
+      formDataToSend.append('utilities[internet]', String(currentFormData.utilities.internet))
+      formDataToSend.append('utilities[gas]', String(currentFormData.utilities.gas))
+      currentImagesToKeep.forEach(url => {
+        formDataToSend.append('imagesToKeep', url)
+      })
+      currentSelectedImages.forEach(file => {
+        formDataToSend.append('images', file)
+      })
+      currentImagesToDelete.forEach(url => {
+        formDataToSend.append('imagesToDelete', url)
+      })
+      response = await propertiesApi.update(currentEditingProperty._id.toString(), formDataToSend)
       
       console.log('[UpdateProperty] API response:', response)
       
@@ -306,7 +302,6 @@ export default function PropertyManagerDashboard() {
           description: "Property has been successfully updated.",
           variant: "default",
         })
-        // Only reset form and state after successful update
         setShowAddProperty(false)
         setEditingProperty(null)
         resetForm()
@@ -377,6 +372,11 @@ export default function PropertyManagerDashboard() {
       features: property.features,
       utilities: property.utilities
     })
+    setExistingImages(property.images || [])
+    setImagesToKeep(property.images || [])
+    setImagesToDelete([])
+    setSelectedImages([])
+    setImagePreviewUrls([])
     setShowAddProperty(true)
   }
 
@@ -423,16 +423,6 @@ export default function PropertyManagerDashboard() {
     } else {
       console.log("No files selected") // Debug log
     }
-  }
-
-  const removeImage = (index: number) => {
-    setSelectedImages(prev => prev.filter((_, i) => i !== index))
-    setImagePreviewUrls(prev => {
-      const newUrls = prev.filter((_, i) => i !== index)
-      // Revoke the URL to free memory
-      URL.revokeObjectURL(prev[index])
-      return newUrls
-    })
   }
 
   const handleDeleteImage = async (propertyId: string, imageIndex: number) => {
@@ -786,7 +776,6 @@ export default function PropertyManagerDashboard() {
                 <div className="space-y-2">
                   <Label>Property Images</Label>
                   <div className="space-y-4">
-                    {/* Image upload input */}
                     <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
                       <div className="space-y-2">
                         <div className="text-gray-500">
@@ -827,39 +816,39 @@ export default function PropertyManagerDashboard() {
                           <p className="mt-1">or drag and drop images here</p>
                         </div>
                         <p className="text-xs text-gray-500">PNG, JPG, GIF up to 5MB each (max 10 images)</p>
-                        {selectedImages.length > 0 && (
-                          <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded">
-                            <p className="text-sm text-blue-700 font-medium">
-                              ✅ {selectedImages.length} image(s) selected
-                            </p>
-                            <p className="text-xs text-blue-600">
-                              Click "Update Property" to upload and create your listing
-                            </p>
-                          </div>
-                        )}
                       </div>
                     </div>
 
-                    {/* Image previews */}
+                    <div className="space-y-2">
+                      <Label>Existing Images</Label>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {imagesToKeep.map((url, index) => (
+                          <div key={url} className="relative group">
+                            <img src={url} alt={`Existing ${index + 1}`} className="w-full h-24 object-cover rounded-lg" />
+                            <button
+                              type="button"
+                              onClick={() => removeExistingImage(url)}
+                              className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                              title="Remove image"
+                            >×</button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
                     {imagePreviewUrls.length > 0 && (
                       <div className="space-y-2">
-                        <Label>Selected Images ({selectedImages.length})</Label>
+                        <Label>New Images ({selectedImages.length})</Label>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                           {imagePreviewUrls.map((url, index) => (
-                            <div key={index} className="relative group">
-                              <img
-                                src={url}
-                                alt={`Preview ${index + 1}`}
-                                className="w-full h-24 object-cover rounded-lg"
-                              />
+                            <div key={url} className="relative group">
+                              <img src={url} alt={`Preview ${index + 1}`} className="w-full h-24 object-cover rounded-lg" />
                               <button
                                 type="button"
-                                onClick={() => removeImage(index)}
+                                onClick={() => removeNewImage(index)}
                                 className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
                                 title="Remove image"
-                              >
-                                ×
-                              </button>
+                              >×</button>
                             </div>
                           ))}
                         </div>
@@ -1142,7 +1131,6 @@ export default function PropertyManagerDashboard() {
                 <div className="space-y-2">
                   <Label>Property Images</Label>
                   <div className="space-y-4">
-                    {/* Image upload input */}
                     <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
                       <div className="space-y-2">
                         <div className="text-gray-500">
@@ -1183,39 +1171,39 @@ export default function PropertyManagerDashboard() {
                           <p className="mt-1">or drag and drop images here</p>
                         </div>
                         <p className="text-xs text-gray-500">PNG, JPG, GIF up to 5MB each (max 10 images)</p>
-                        {selectedImages.length > 0 && (
-                          <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded">
-                            <p className="text-sm text-blue-700 font-medium">
-                              ✅ {selectedImages.length} image(s) selected
-                            </p>
-                            <p className="text-xs text-blue-600">
-                              Click "List Property" to upload and create your listing
-                            </p>
-                          </div>
-                        )}
                       </div>
                     </div>
 
-                    {/* Image previews */}
+                    <div className="space-y-2">
+                      <Label>Existing Images</Label>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {imagesToKeep.map((url, index) => (
+                          <div key={url} className="relative group">
+                            <img src={url} alt={`Existing ${index + 1}`} className="w-full h-24 object-cover rounded-lg" />
+                            <button
+                              type="button"
+                              onClick={() => removeExistingImage(url)}
+                              className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                              title="Remove image"
+                            >×</button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
                     {imagePreviewUrls.length > 0 && (
                       <div className="space-y-2">
-                        <Label>Selected Images ({selectedImages.length})</Label>
+                        <Label>New Images ({selectedImages.length})</Label>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                           {imagePreviewUrls.map((url, index) => (
-                            <div key={index} className="relative group">
-                              <img
-                                src={url}
-                                alt={`Preview ${index + 1}`}
-                                className="w-full h-24 object-cover rounded-lg"
-                              />
+                            <div key={url} className="relative group">
+                              <img src={url} alt={`Preview ${index + 1}`} className="w-full h-24 object-cover rounded-lg" />
                               <button
                                 type="button"
-                                onClick={() => removeImage(index)}
+                                onClick={() => removeNewImage(index)}
                                 className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
                                 title="Remove image"
-                              >
-                                ×
-                              </button>
+                              >×</button>
                             </div>
                           ))}
                         </div>
