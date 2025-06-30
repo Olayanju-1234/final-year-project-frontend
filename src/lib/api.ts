@@ -1,5 +1,5 @@
 import axios from "axios"
-import type { LoginRequest, RegisterRequest, ApiResponse } from "../../../final-year-project-backend/src/types"
+import type { LoginRequest, RegisterRequest, UpdateProfileRequest, ChangePasswordRequest, ApiResponse } from "@/src/types"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api/v1"
 
@@ -66,6 +66,24 @@ export const getProfile = async (): Promise<ApiResponse> => {
   try {
     const timestamp = new Date().getTime()
     const response = await apiClient.get<ApiResponse>(`/auth/me?t=${timestamp}`)
+    return response.data
+  } catch (error: any) {
+    return error.response?.data || { success: false, message: "An unknown error occurred" }
+  }
+}
+
+export const updateProfile = async (profileData: UpdateProfileRequest): Promise<ApiResponse> => {
+  try {
+    const response = await apiClient.put<ApiResponse>("/auth/profile", profileData)
+    return response.data
+  } catch (error: any) {
+    return error.response?.data || { success: false, message: "An unknown error occurred" }
+  }
+}
+
+export const changePassword = async (passwordData: ChangePasswordRequest): Promise<ApiResponse> => {
+  try {
+    const response = await apiClient.put<ApiResponse>("/auth/change-password", passwordData)
     return response.data
   } catch (error: any) {
     return error.response?.data || { success: false, message: "An unknown error occurred" }

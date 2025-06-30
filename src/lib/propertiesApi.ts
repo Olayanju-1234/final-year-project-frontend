@@ -1,5 +1,5 @@
 import apiClient from "./api"
-import type { IProperty, ApiResponse } from "../../../final-year-project-backend/src/types"
+import type { IProperty, ApiResponse } from "@/src/types"
 
 export const propertiesApi = {
   getAll: async (filters?: {

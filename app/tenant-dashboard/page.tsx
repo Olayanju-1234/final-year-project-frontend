@@ -1,6 +1,6 @@
- "use client"
+"use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { useToast } from "@/hooks/use-toast"
 import {
   MapPin,
   Home,
@@ -28,113 +29,299 @@ import {
   Star,
   Bath,
   Bed,
+  MessageSquare,
+  Calendar,
+  DollarSign,
 } from "lucide-react"
-
-// Mock data for property matches
-const propertyMatches = [
-  {
-    id: 1,
-    title: "Modern 2-Bedroom Apartment",
-    location: "Victoria Island, Lagos",
-    rent: "₦850,000",
-    compatibility: 92,
-    image: "/placeholder.svg?height=200&width=300",
-    bedrooms: 2,
-    bathrooms: 2,
-    amenities: ["WiFi", "Parking", "Security", "Generator"],
-    description: "Spacious apartment with modern finishes in prime location",
-    landlord: "Adebayo Properties",
-    matchReasons: [
-      "Perfect budget match (₦850k vs ₦900k max)",
-      "Preferred location: Victoria Island",
-      "All requested amenities available",
-    ],
-  },
-  {
-    id: 2,
-    title: "Luxury 3-Bedroom Duplex",
-    location: "Lekki Phase 1, Lagos",
-    rent: "₦1,200,000",
-    compatibility: 78,
-    image: "/placeholder.svg?height=200&width=300",
-    bedrooms: 3,
-    bathrooms: 3,
-    amenities: ["WiFi", "Parking", "Security", "Pool", "Gym"],
-    description: "Executive duplex with premium amenities",
-    landlord: "Prime Estates",
-    matchReasons: [
-      "Slightly above budget (₦1.2M vs ₦900k max)",
-      "Excellent location match",
-      "Premium amenities included",
-    ],
-  },
-  {
-    id: 3,
-    title: "Cozy 1-Bedroom Studio",
-    location: "Ikeja GRA, Lagos",
-    rent: "₦450,000",
-    compatibility: 85,
-    image: "/placeholder.svg?height=200&width=300",
-    bedrooms: 1,
-    bathrooms: 1,
-    amenities: ["WiFi", "Security", "Generator"],
-    description: "Perfect for young professionals",
-    landlord: "Urban Living",
-    matchReasons: [
-      "Well within budget (₦450k vs ₦900k max)",
-      "Good location accessibility",
-      "Essential amenities covered",
-    ],
-  },
-]
+import { useAuth } from "@/src/context/AuthContext"
+import { tenantsApi } from "@/src/lib/tenantsApi"
+import { optimizationApi } from "@/src/lib/optimizationApi"
+import { propertiesApi } from "@/src/lib/propertiesApi"
+import { PreferencesModal } from "@/src/components/tenant/PreferencesModal"
+import { Header } from "@/src/components/layout/Header"
+import { LoadingSpinner } from "@/src/components/ui/loading-spinner"
+import { MessageCenter } from "@/src/components/communication/MessageCenter"
+import { ProfileManager } from "@/src/components/profile/ProfileManager"
+import { convertBackendToFrontend } from "@/src/utils/typeConversion"
+import type { ITenant, PropertyMatch, IProperty } from "@/src/types"
 
 export default function TenantDashboard() {
-  const [budget, setBudget] = useState([900000])
-  const [selectedAmenities, setSelectedAmenities] = useState(["WiFi", "Parking", "Security"])
-  const [location, setLocation] = useState("Victoria Island")
+  const { user, isLoading: authLoading } = useAuth()
+  const { toast } = useToast()
+  const [tenant, setTenant] = useState<ITenant | null>(null)
+  const [matches, setMatches] = useState<PropertyMatch[]>([])
+  const [properties, setProperties] = useState<IProperty[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showPreferencesModal, setShowPreferencesModal] = useState(false)
+  const [fetchingMatches, setFetchingMatches] = useState(false)
+  const [updatingPreferences, setUpdatingPreferences] = useState(false)
+  const [activeTab, setActiveTab] = useState('matches')
 
-  const amenitiesList = [
-    { id: "wifi", label: "WiFi", icon: Wifi },
-    { id: "parking", label: "Parking", icon: Car },
-    { id: "security", label: "Security", icon: Shield },
-    { id: "generator", label: "Generator", icon: Zap },
-    { id: "water", label: "Water Supply", icon: Droplets },
-  ]
+  // Fetch tenant profile and preferences
+  useEffect(() => {
+    if (!user || authLoading || user.userType !== "tenant") return
+    
+    const fetchTenantData = async () => {
+      setLoading(true)
+      try {
+        // Use tenantId from user object if available, otherwise use user._id
+        const tenantId = user.tenantId || user._id
+        console.log("Fetching tenant data with ID:", tenantId)
+        
+        const res = await tenantsApi.getProfile(tenantId)
+        
+        if (res.success && res.data) {
+          const convertedTenant = convertBackendToFrontend.tenant(res.data)
+          setTenant(convertedTenant)
+          // If no preferences, show modal
+          if (!res.data.preferences || !res.data.preferences.preferredLocation) {
+            setShowPreferencesModal(true)
+          } else {
+            await fetchMatches(convertedTenant)
+          }
+        } else {
+          console.error("Failed to fetch tenant profile:", res.message)
+          // If tenant profile doesn't exist, show preferences modal
+          setShowPreferencesModal(true)
+        }
+      } catch (error) {
+        console.error("Error fetching tenant data:", error)
+        // If error occurs, show preferences modal to create tenant profile
+        setShowPreferencesModal(true)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchTenantData()
+  }, [user, authLoading])
+
+  // Fetch property matches from optimization API
+  const fetchMatches = async (tenantData: ITenant) => {
+    if (!tenantData._id) {
+      console.error("No tenant ID available for fetching matches")
+      return
+    }
+
+    setFetchingMatches(true)
+    try {
+      const res = await optimizationApi.findMatches(tenantData._id)
+      if (res.success && res.data && res.data.matches) {
+        const convertedMatches = res.data.matches.map(match => convertBackendToFrontend.propertyMatch(match))
+        setMatches(convertedMatches)
+        
+        // Fetch property details for each match
+        const propertyIds = convertedMatches.map(match => match.propertyId)
+        await fetchPropertyDetails(propertyIds)
+      } else {
+        setMatches([])
+        console.log("No matches found or API error:", res.message)
+      }
+    } catch (error) {
+      console.error("Error fetching matches:", error)
+      setMatches([])
+      toast({
+        title: "Error",
+        description: "Failed to fetch property matches. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setFetchingMatches(false)
+    }
+  }
+
+  // Fetch property details for matches
+  const fetchPropertyDetails = async (propertyIds: string[]) => {
+    try {
+      const propertyPromises = propertyIds.map(id => propertiesApi.getById(id))
+      const propertyResults = await Promise.allSettled(propertyPromises)
+      
+      const validProperties = propertyResults
+        .filter((result): result is PromiseFulfilledResult<any> => result.status === 'fulfilled')
+        .map(result => convertBackendToFrontend.property(result.value.data))
+        .filter(Boolean)
+
+      setProperties(validProperties)
+    } catch (error) {
+      console.error("Error fetching property details:", error)
+    }
+  }
+
+  // Handler for when preferences are saved in modal
+  const handlePreferencesSaved = async () => {
+    if (!user) return
+    setShowPreferencesModal(false)
+    setLoading(true)
+    
+    try {
+      const tenantId = user.tenantId || user._id
+      const res = await tenantsApi.getProfile(tenantId)
+      if (res.success && res.data) {
+        setTenant(convertBackendToFrontend.tenant(res.data))
+        await fetchMatches(convertBackendToFrontend.tenant(res.data))
+        toast({
+          title: "Preferences Saved!",
+          description: "Your preferences have been updated and we're finding new matches for you.",
+          variant: "default",
+        })
+      }
+    } catch (error) {
+      console.error("Error after saving preferences:", error)
+      toast({
+        title: "Error",
+        description: "Failed to update preferences. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Handler for updating preferences from preferences tab
+  const handleUpdatePreferences = async (preferences: ITenant["preferences"]) => {
+    if (!user) return
+    setUpdatingPreferences(true)
+    
+    try {
+      const tenantId = user.tenantId || user._id
+      const res = await tenantsApi.updatePreferences(tenantId, preferences)
+      
+      if (res.success) {
+        // Refetch tenant data and matches
+        const tenantRes = await tenantsApi.getProfile(tenantId)
+        if (tenantRes.success && tenantRes.data) {
+          setTenant(convertBackendToFrontend.tenant(tenantRes.data))
+          await fetchMatches(convertBackendToFrontend.tenant(tenantRes.data))
+          toast({
+            title: "Preferences Updated!",
+            description: "Your preferences have been updated and we're finding new matches for you.",
+            variant: "default",
+          })
+        }
+      } else {
+        toast({
+          title: "Error",
+          description: res.message || "Failed to update preferences",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error updating preferences:", error)
+      toast({
+        title: "Error",
+        description: "Failed to update preferences. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setUpdatingPreferences(false)
+    }
+  }
+
+  // Handle saving/unsaving properties
+  const handleSaveProperty = async (propertyId: string) => {
+    if (!user) return
+    
+    try {
+      const tenantId = user.tenantId || user._id
+      const res = await tenantsApi.saveProperty(tenantId, propertyId)
+      
+      if (res.success) {
+        toast({
+          title: "Property Saved!",
+          description: "Property has been added to your saved list.",
+          variant: "default",
+        })
+        // Refresh tenant data to update saved properties
+        const tenantRes = await tenantsApi.getProfile(tenantId)
+        if (tenantRes.success && tenantRes.data) {
+          setTenant(convertBackendToFrontend.tenant(tenantRes.data))
+        }
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to save property. Please try again.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Handle requesting viewing
+  const handleRequestViewing = async (propertyId: string) => {
+    if (!user) return
+    
+    try {
+      const tenantId = user.tenantId || user._id
+      const res = await tenantsApi.requestViewing(tenantId, propertyId)
+      
+      if (res.success) {
+        toast({
+          title: "Viewing Requested!",
+          description: "Your viewing request has been sent to the property manager.",
+          variant: "default",
+        })
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to request viewing. Please try again.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  if (authLoading || loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <LoadingSpinner size="lg" />
+      </div>
+    )
+  }
+
+  // Only allow tenants
+  if (!user || user.userType !== 'tenant') {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-xl font-semibold mb-2">You must be logged in as a tenant to view this dashboard.</h2>
+          <p className="text-gray-500">Please log in with a tenant account and try again.</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between max-w-7xl mx-auto">
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <Home className="h-8 w-8 text-blue-600" />
-              <h1 className="text-2xl font-bold text-gray-900">RentMatch</h1>
-            </div>
-          </div>
-          <div className="flex items-center space-x-4">
-            <Button variant="ghost" size="icon">
-              <Bell className="h-5 w-5" />
-            </Button>
-            <Avatar>
-              <AvatarImage src="/placeholder.svg?height=32&width=32" />
-              <AvatarFallback>JD</AvatarFallback>
-            </Avatar>
-          </div>
-        </div>
-      </header>
-
+      <Header userType="tenant" userName={user.name} />
+      
+      <PreferencesModal
+        isOpen={showPreferencesModal}
+        onClose={() => setShowPreferencesModal(false)}
+        onPreferencesSaved={handlePreferencesSaved}
+      />
+      
       <div className="max-w-7xl mx-auto px-6 py-8">
         <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-2">Welcome back, John!</h2>
-          <p className="text-gray-600">We found {propertyMatches.length} properties that match your preferences</p>
+          <h2 className="text-3xl font-bold text-gray-900 mb-2">Welcome back, {user.name}!</h2>
+          <p className="text-gray-600">
+            {fetchingMatches ? (
+              <span className="flex items-center">
+                <LoadingSpinner size="sm" className="mr-2" />
+                Finding your best matches...
+              </span>
+            ) : (
+              <>We found {matches.length} properties that match your preferences</>
+            )}
+          </p>
         </div>
 
-        <Tabs defaultValue="matches" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3 lg:w-[400px]">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <TabsList className="grid w-full grid-cols-5 lg:w-[600px]">
             <TabsTrigger value="matches">My Matches</TabsTrigger>
             <TabsTrigger value="preferences">Preferences</TabsTrigger>
             <TabsTrigger value="saved">Saved Properties</TabsTrigger>
+            <TabsTrigger value="communications">Messages</TabsTrigger>
+            <TabsTrigger value="profile">Profile</TabsTrigger>
           </TabsList>
 
           <TabsContent value="matches" className="space-y-6">
@@ -145,7 +332,7 @@ export default function TenantDashboard() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-gray-600">Total Matches</p>
-                      <p className="text-3xl font-bold text-blue-600">{propertyMatches.length}</p>
+                      <p className="text-3xl font-bold text-blue-600">{matches.length}</p>
                     </div>
                     <Search className="h-8 w-8 text-blue-600" />
                   </div>
@@ -156,7 +343,9 @@ export default function TenantDashboard() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-gray-600">Best Match</p>
-                      <p className="text-3xl font-bold text-green-600">92%</p>
+                      <p className="text-3xl font-bold text-green-600">
+                        {matches.length > 0 ? `${Math.round(Math.max(...matches.map(m => m.matchScore)))}%` : "-"}
+                      </p>
                     </div>
                     <Star className="h-8 w-8 text-green-600" />
                   </div>
@@ -167,7 +356,9 @@ export default function TenantDashboard() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-gray-600">Avg. Compatibility</p>
-                      <p className="text-3xl font-bold text-purple-600">85%</p>
+                      <p className="text-3xl font-bold text-purple-600">
+                        {matches.length > 0 ? `${Math.round(matches.reduce((sum, m) => sum + m.matchScore, 0) / matches.length)}%` : "-"}
+                      </p>
                     </div>
                     <Heart className="h-8 w-8 text-purple-600" />
                   </div>
@@ -179,101 +370,145 @@ export default function TenantDashboard() {
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <h3 className="text-xl font-semibold text-gray-900">Your Top Matches</h3>
-                <Button variant="outline" size="sm">
-                  <Filter className="h-4 w-4 mr-2" />
-                  Filter Results
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  disabled={fetchingMatches} 
+                  onClick={() => tenant && fetchMatches(tenant)}
+                >
+                  {fetchingMatches ? (
+                    <LoadingSpinner size="sm" className="mr-2" />
+                  ) : (
+                    <Filter className="h-4 w-4 mr-2" />
+                  )}
+                  Refresh Results
                 </Button>
               </div>
 
-              {propertyMatches.map((property) => (
-                <Card key={property.id} className="overflow-hidden hover:shadow-lg transition-shadow">
-                  <div className="md:flex">
-                    <div className="md:w-1/3">
-                      <img
-                        src={property.image || "/placeholder.svg"}
-                        alt={property.title}
-                        className="w-full h-48 md:h-full object-cover"
-                      />
-                    </div>
-                    <div className="md:w-2/3 p-6">
-                      <div className="flex items-start justify-between mb-4">
-                        <div>
-                          <h4 className="text-xl font-semibold text-gray-900 mb-2">{property.title}</h4>
-                          <div className="flex items-center text-gray-600 mb-2">
-                            <MapPin className="h-4 w-4 mr-1" />
-                            <span className="text-sm">{property.location}</span>
+              {matches.length === 0 && !fetchingMatches && (
+                <Card>
+                  <CardContent className="p-8 text-center">
+                    <Search className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Matches Yet</h3>
+                    <p className="text-gray-600 mb-4">
+                      {tenant?.preferences ? 
+                        "We couldn't find properties matching your current preferences. Try adjusting your criteria." :
+                        "Set up your preferences to get personalized property recommendations."
+                      }
+                    </p>
+                    <Button onClick={() => setShowPreferencesModal(true)}>
+                      <Settings className="h-4 w-4 mr-2" />
+                      {tenant?.preferences ? "Update Preferences" : "Set Preferences"}
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+
+              {fetchingMatches && (
+                <div className="flex justify-center py-8">
+                  <LoadingSpinner size="lg" />
+                </div>
+              )}
+
+              {matches.map((match) => {
+                const property = properties.find(p => p._id === match.propertyId)
+                
+                return (
+                  <Card key={match.propertyId} className="overflow-hidden hover:shadow-lg transition-shadow">
+                    <div className="md:flex">
+                      <div className="md:w-1/3">
+                        <img
+                          src={property?.images?.[0] || "/placeholder.svg"}
+                          alt={property?.title || "Property"}
+                          className="w-full h-48 md:h-full object-cover"
+                        />
+                      </div>
+                      <div className="md:w-2/3 p-6">
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="flex-1">
+                            <h4 className="text-xl font-semibold text-gray-900 mb-2">
+                              {property?.title || `Property ${match.propertyId}`}
+                            </h4>
+                            <div className="flex items-center text-gray-600 mb-2">
+                              <MapPin className="h-4 w-4 mr-1" />
+                              <span className="text-sm">
+                                {property?.location ? 
+                                  `${property.location.address}, ${property.location.city}` : 
+                                  "Location not available"
+                                }
+                              </span>
+                            </div>
+                            {property?.rent && (
+                              <p className="text-2xl font-bold text-blue-600">
+                                ₦{property.rent.toLocaleString()}/year
+                              </p>
+                            )}
                           </div>
-                          <p className="text-2xl font-bold text-blue-600">{property.rent}/year</p>
-                        </div>
-                        <div className="text-right">
-                          <div className="flex items-center space-x-2 mb-2">
-                            <Badge
-                              variant={
-                                property.compatibility >= 90
-                                  ? "default"
-                                  : property.compatibility >= 80
-                                    ? "secondary"
-                                    : "outline"
-                              }
-                              className="text-sm"
-                            >
-                              {property.compatibility}% Match
+                          <div className="text-right ml-4">
+                            <Badge variant="secondary" className="text-sm mb-2">
+                              {Math.round(match.matchScore)}% Match
                             </Badge>
+                            <Progress value={match.matchScore} className="w-24" />
                           </div>
-                          <Progress value={property.compatibility} className="w-24" />
                         </div>
-                      </div>
 
-                      <div className="flex items-center space-x-4 mb-4 text-sm text-gray-600">
-                        <div className="flex items-center">
-                          <Bed className="h-4 w-4 mr-1" />
-                          <span>{property.bedrooms} bed</span>
+                        {property && (
+                          <div className="flex items-center space-x-4 mb-4 text-sm text-gray-600">
+                            <div className="flex items-center">
+                              <Bed className="h-4 w-4 mr-1" />
+                              <span>{property.bedrooms} bed</span>
+                            </div>
+                            <div className="flex items-center">
+                              <Bath className="h-4 w-4 mr-1" />
+                              <span>{property.bathrooms} bath</span>
+                            </div>
+                            {property.size && (
+                              <div className="flex items-center">
+                                <span>{property.size} sqm</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="mb-4">
+                          <h5 className="text-sm font-medium text-gray-700 mb-2">Why this matches:</h5>
+                          <ul className="text-sm text-green-700 space-y-1">
+                            {match.explanation.slice(0, 3).map((reason, idx) => (
+                              <li key={idx} className="flex items-start">
+                                <span className="text-green-500 mr-2">•</span>
+                                {reason}
+                              </li>
+                            ))}
+                          </ul>
                         </div>
-                        <div className="flex items-center">
-                          <Bath className="h-4 w-4 mr-1" />
-                          <span>{property.bathrooms} bath</span>
-                        </div>
-                      </div>
 
-                      <div className="flex flex-wrap gap-2 mb-4">
-                        {property.amenities.map((amenity) => (
-                          <Badge key={amenity} variant="outline" className="text-xs">
-                            {amenity}
-                          </Badge>
-                        ))}
-                      </div>
-
-                      <p className="text-gray-600 mb-4">{property.description}</p>
-
-                      <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
-                        <h5 className="font-medium text-green-800 mb-2">Why this matches you:</h5>
-                        <ul className="text-sm text-green-700 space-y-1">
-                          {property.matchReasons.map((reason, index) => (
-                            <li key={index} className="flex items-start">
-                              <span className="text-green-500 mr-2">•</span>
-                              {reason}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-
-                      <div className="flex items-center justify-between">
-                        <p className="text-sm text-gray-500">Listed by {property.landlord}</p>
                         <div className="flex space-x-2">
                           <Button variant="outline" size="sm">
                             <Eye className="h-4 w-4 mr-2" />
                             View Details
                           </Button>
-                          <Button size="sm">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleSaveProperty(match.propertyId)}
+                          >
                             <Heart className="h-4 w-4 mr-2" />
-                            Contact Owner
+                            Save
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleRequestViewing(match.propertyId)}
+                          >
+                            <Calendar className="h-4 w-4 mr-2" />
+                            Request Viewing
                           </Button>
                         </div>
                       </div>
                     </div>
-                  </div>
-                </Card>
-              ))}
+                  </Card>
+                )
+              })}
             </div>
           </TabsContent>
 
@@ -282,84 +517,125 @@ export default function TenantDashboard() {
               <CardHeader>
                 <CardTitle className="flex items-center">
                   <Settings className="h-5 w-5 mr-2" />
-                  Update Your Preferences
+                  Your Preferences
                 </CardTitle>
-                <CardDescription>Adjust your preferences to get better property matches</CardDescription>
+                <CardDescription>
+                  Adjust your preferences to get better property matches
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div>
-                  <Label className="text-base font-medium">Budget Range</Label>
-                  <div className="mt-2">
-                    <Slider
-                      value={budget}
-                      onValueChange={setBudget}
-                      max={2000000}
-                      min={200000}
-                      step={50000}
-                      className="w-full"
-                    />
-                    <div className="flex justify-between text-sm text-gray-500 mt-1">
-                      <span>₦200k</span>
-                      <span className="font-medium">₦{budget[0].toLocaleString()}</span>
-                      <span>₦2M</span>
+                {tenant?.preferences ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-sm font-medium">Budget Range</Label>
+                        <p className="text-sm text-gray-600">
+                          ₦{tenant.preferences.budget?.min?.toLocaleString()} - ₦{tenant.preferences.budget?.max?.toLocaleString()}
+                        </p>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium">Preferred Location</Label>
+                        <p className="text-sm text-gray-600">{tenant.preferences.preferredLocation}</p>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium">Bedrooms</Label>
+                        <p className="text-sm text-gray-600">{tenant.preferences.preferredBedrooms}</p>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium">Bathrooms</Label>
+                        <p className="text-sm text-gray-600">{tenant.preferences.preferredBathrooms}</p>
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium">Required Amenities</Label>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {tenant.preferences.requiredAmenities?.map((amenity, index) => (
+                          <Badge key={index} variant="outline">{amenity}</Badge>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                </div>
-
-                <div>
-                  <Label className="text-base font-medium">Preferred Location</Label>
-                  <Select value={location} onValueChange={setLocation}>
-                    <SelectTrigger className="mt-2">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Victoria Island">Victoria Island</SelectItem>
-                      <SelectItem value="Lekki">Lekki</SelectItem>
-                      <SelectItem value="Ikeja">Ikeja</SelectItem>
-                      <SelectItem value="Surulere">Surulere</SelectItem>
-                      <SelectItem value="Yaba">Yaba</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label className="text-base font-medium mb-4 block">Required Amenities</Label>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {amenitiesList.map((amenity) => (
-                      <div key={amenity.id} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={amenity.id}
-                          checked={selectedAmenities.includes(amenity.label)}
-                          onCheckedChange={(checked) => {
-                            if (checked) {
-                              setSelectedAmenities([...selectedAmenities, amenity.label])
-                            } else {
-                              setSelectedAmenities(selectedAmenities.filter((a) => a !== amenity.label))
-                            }
-                          }}
-                        />
-                        <Label htmlFor={amenity.id} className="flex items-center cursor-pointer">
-                          <amenity.icon className="h-4 w-4 mr-2" />
-                          {amenity.label}
-                        </Label>
-                      </div>
-                    ))}
+                ) : (
+                  <div className="text-center py-8">
+                    <Settings className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Preferences Set</h3>
+                    <p className="text-gray-600 mb-4">Set your preferences to get personalized property recommendations.</p>
                   </div>
-                </div>
-
-                <Button className="w-full">Update Preferences & Find New Matches</Button>
+                )}
+                
+                <Button 
+                  className="w-full" 
+                  onClick={() => setShowPreferencesModal(true)} 
+                  disabled={updatingPreferences}
+                >
+                  {updatingPreferences ? (
+                    <LoadingSpinner size="sm" className="mr-2" />
+                  ) : (
+                    <Settings className="h-4 w-4 mr-2" />
+                  )}
+                  {tenant?.preferences ? "Edit Preferences" : "Set Preferences"}
+                </Button>
               </CardContent>
             </Card>
           </TabsContent>
 
-          <TabsContent value="saved">
-            <Card>
-              <CardContent className="p-6 text-center">
-                <Heart className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No Saved Properties Yet</h3>
-                <p className="text-gray-600">Properties you save will appear here for easy access later.</p>
-              </CardContent>
-            </Card>
+          <TabsContent value="saved" className="space-y-6">
+            {tenant?.savedProperties && tenant.savedProperties.length > 0 ? (
+              <div className="space-y-6">
+                {tenant.savedProperties.map((propertyId) => {
+                  const property = properties.find(p => p._id === propertyId)
+                  return property ? (
+                    <Card key={propertyId} className="overflow-hidden">
+                      <div className="md:flex">
+                        <div className="md:w-1/3">
+                          <img
+                            src={property.images?.[0] || "/placeholder.svg"}
+                            alt={property.title}
+                            className="w-full h-48 md:h-full object-cover"
+                          />
+                        </div>
+                        <div className="md:w-2/3 p-6">
+                          <h4 className="text-xl font-semibold text-gray-900 mb-2">{property.title}</h4>
+                          <div className="flex items-center text-gray-600 mb-2">
+                            <MapPin className="h-4 w-4 mr-1" />
+                            <span className="text-sm">{property.location.address}, {property.location.city}</span>
+                          </div>
+                          <p className="text-2xl font-bold text-blue-600 mb-4">₦{property.rent.toLocaleString()}/year</p>
+                          <div className="flex space-x-2">
+                            <Button variant="outline" size="sm">
+                              <Eye className="h-4 w-4 mr-2" />
+                              View Details
+                            </Button>
+                            <Button variant="outline" size="sm">
+                              <MessageSquare className="h-4 w-4 mr-2" />
+                              Contact
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  ) : null
+                })}
+              </div>
+            ) : (
+              <Card>
+                <CardContent className="p-6 text-center">
+                  <Heart className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Saved Properties Yet</h3>
+                  <p className="text-gray-600">Properties you save will appear here for easy access later.</p>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+
+          <TabsContent value="communications" className="space-y-6">
+            {user && (
+              <MessageCenter userId={user._id} userType="tenant" />
+            )}
+          </TabsContent>
+
+          <TabsContent value="profile" className="space-y-6">
+            <ProfileManager />
           </TabsContent>
         </Tabs>
       </div>

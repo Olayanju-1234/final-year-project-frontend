@@ -1,9 +1,10 @@
 import apiClient from "./api"
-import type { PropertyMatch, OptimizationResult, ApiResponse, OptimizationConstraints, OptimizationWeights } from "../../../final-year-project-backend/src/types"
+import type { PropertyMatch, OptimizationResult, ApiResponse, OptimizationConstraints, OptimizationWeights } from "@/src/types"
 
 export const optimizationApi = {
-  findMatches: async (tenantId: string): Promise<ApiResponse<OptimizationResult>> => {
-    const response = await apiClient.get<ApiResponse<OptimizationResult>>(`/optimization/matches/${tenantId}`)
+  findMatches: async (tenantId: string, maxResults?: number): Promise<ApiResponse<OptimizationResult>> => {
+    const params = { ...(maxResults && { maxResults }) }
+    const response = await apiClient.get<ApiResponse<OptimizationResult>>(`/optimization/matches/${tenantId}`, { params })
     return response.data
   },
 
@@ -21,6 +22,11 @@ export const optimizationApi = {
 
   getOptimizationStats: async (): Promise<ApiResponse<any>> => {
     const response = await apiClient.get<ApiResponse<any>>("/optimization/stats")
+    return response.data
+  },
+
+  testOptimization: async (): Promise<ApiResponse<any>> => {
+    const response = await apiClient.post<ApiResponse<any>>("/optimization/test")
     return response.data
   },
 } 
