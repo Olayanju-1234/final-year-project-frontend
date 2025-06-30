@@ -138,7 +138,7 @@ export function PreferencesModal({ isOpen, onClose, onPreferencesSaved }: Prefer
       }
       console.log("Submitting preferences payload:", preferences)
 
-      const response = await tenantsApi.updatePreferences(tenantId, preferences)
+      const response = await tenantsApi.updatePreferences(tenantId, { preferences })
       
       if (response.success) {
         toast({

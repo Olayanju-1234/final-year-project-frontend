@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -13,9 +14,13 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { LoadingSpinner } from "@/src/components/ui/loading-spinner"
+import { MessageCenter } from "@/src/components/communication/MessageCenter"
+import { ProfileManager } from "@/src/components/profile/ProfileManager"
+import { Header } from "@/src/components/layout/Header"
 import { propertiesApi } from "@/src/lib/propertiesApi"
 import { useAuth } from "@/src/context/AuthContext"
-import type { IProperty } from "../../../final-year-project-backend/src/types"
+import { convertBackendToFrontend } from "@/src/utils/typeConversion"
+import type { IProperty } from "@/src/types"
 import {
   Home,
   Plus,
@@ -38,7 +43,13 @@ import {
   CheckCircle,
   XCircle,
   Clock,
+  MessageSquare,
 } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+
+function getUserId(user: { _id?: string; id?: string }): string | undefined {
+  return user?._id || (user as any)?.id;
+}
 
 export default function PropertyManagerDashboard() {
   const [showAddProperty, setShowAddProperty] = useState(false)
@@ -48,6 +59,16 @@ export default function PropertyManagerDashboard() {
   const [error, setError] = useState<string | null>(null)
   const { toast } = useToast()
   const { user, isLoading } = useAuth()
+  const searchParams = useSearchParams()
+  const [activeTab, setActiveTab] = useState('properties')
+
+  // Get initial tab from URL params
+  useEffect(() => {
+    const tabParam = searchParams?.get('tab');
+    if (tabParam && ['properties', 'matches', 'communications', 'analytics', 'profile'].includes(tabParam)) {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
 
   // Form state for adding/editing property
   const [formData, setFormData] = useState({
@@ -118,32 +139,45 @@ export default function PropertyManagerDashboard() {
 
   // Fetch properties on component mount
   useEffect(() => {
-    if (user && !isLoading) {
-      fetchProperties()
+    if (!user || isLoading || user.userType !== "landlord") return;
+    const landlordId = getUserId(user);
+    if (!landlordId) {
+      console.warn("[Dashboard] Landlord user has no id or _id!", user);
+      return;
     }
-  }, [user, isLoading])
+    fetchProperties(landlordId);
+  }, [user, isLoading]);
 
-  const fetchProperties = async () => {
-    console.log('fetchProperties called', user)
-    const userId = user?._id || user?.id
-    if (!user || !userId) {
-      console.log('No user or user id/_id found')
+  const fetchProperties = async (landlordIdParam?: string) => {
+    const landlordId = landlordIdParam || getUserId(user || {});
+    console.log('[fetchProperties] called', user)
+    if (!user || user.userType !== 'landlord' || !landlordId) {
+      console.log('[fetchProperties] No user or not landlord or no landlordId')
       return
     }
     try {
       setLoading(true)
-      const response = await propertiesApi.getByLandlord(userId.toString())
-      console.log('Properties API response:', response)
+      console.log('[fetchProperties] Fetching properties for landlord:', landlordId)
+      const response = await propertiesApi.getByLandlord(landlordId.toString())
+      console.log('[fetchProperties] API response:', response)
       if (response.success && response.data) {
-        setProperties(response.data)
+        // Always treat as array
+        const dataArray = Array.isArray(response.data) ? response.data : [response.data];
+        console.log('[fetchProperties] Raw API data:', dataArray);
+        const convertedProperties = dataArray.map((property: any) => convertBackendToFrontend.property(property));
+        console.log('[fetchProperties] Converted properties:', convertedProperties);
+        setProperties(convertedProperties);
+        console.log('[fetchProperties] Properties set:', convertedProperties.length)
       } else {
         setError(response.message || "Failed to fetch properties")
+        console.log('[fetchProperties] API failed:', response.message)
       }
     } catch (err) {
-      setError("Failed to fetch properties")
-      console.error("Error fetching properties:", err)
+      console.error('[fetchProperties] Error:', err)
+      setError("Failed to fetch properties: " + (err instanceof Error ? err.message : 'Unknown error'))
     } finally {
       setLoading(false)
+      console.log('[fetchProperties] completed, loading set to false')
     }
   }
 
@@ -532,22 +566,11 @@ export default function PropertyManagerDashboard() {
     return (
       <div className="min-h-screen bg-gray-50">
         {/* Header */}
-        <header className="bg-white border-b border-gray-200 px-6 py-4">
-          <div className="flex items-center justify-between max-w-7xl mx-auto">
-            <div className="flex items-center space-x-4">
-              <Button variant="ghost" onClick={() => {
-                setShowAddProperty(false)
-                setEditingProperty(null)
-                resetForm()
-              }}>
-                ← Back to Dashboard
-              </Button>
-              <h1 className="text-2xl font-bold text-gray-900">
-                Edit Property
-              </h1>
-            </div>
-          </div>
-        </header>
+        <Header 
+          userType="landlord"
+          userName={user?.name || "Property Manager"}
+          onAddProperty={() => { setShowAddProperty(false); setEditingProperty(null); resetForm(); }}
+        />
 
         <div className="max-w-4xl mx-auto px-6 py-8">
           <Card>
@@ -888,21 +911,11 @@ export default function PropertyManagerDashboard() {
     return (
       <div className="min-h-screen bg-gray-50">
         {/* Header */}
-        <header className="bg-white border-b border-gray-200 px-6 py-4">
-          <div className="flex items-center justify-between max-w-7xl mx-auto">
-            <div className="flex items-center space-x-4">
-              <Button variant="ghost" onClick={() => {
-                setShowAddProperty(false)
-                resetForm()
-              }}>
-                ← Back to Dashboard
-              </Button>
-              <h1 className="text-2xl font-bold text-gray-900">
-                Add New Property
-              </h1>
-            </div>
-          </div>
-        </header>
+        <Header 
+          userType="landlord"
+          userName={user?.name || "Property Manager"}
+          onAddProperty={() => { setShowAddProperty(false); resetForm(); }}
+        />
 
         <div className="max-w-4xl mx-auto px-6 py-8">
           <Card>
@@ -1252,30 +1265,11 @@ export default function PropertyManagerDashboard() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between max-w-7xl mx-auto">
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <Home className="h-8 w-8 text-blue-600" />
-              <h1 className="text-2xl font-bold text-gray-900">RentMatch</h1>
-            </div>
-            <Badge variant="secondary">Property Manager</Badge>
-          </div>
-          <div className="flex items-center space-x-4">
-            <Button onClick={() => setShowAddProperty(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Property
-            </Button>
-            <Button variant="ghost" size="icon">
-              <Bell className="h-5 w-5" />
-            </Button>
-            <Avatar>
-              <AvatarImage src="/placeholder.svg?height=32&width=32" />
-              <AvatarFallback>PM</AvatarFallback>
-            </Avatar>
-          </div>
-        </div>
-      </header>
+      <Header 
+        userType="landlord"
+        userName={user?.name || "Property Manager"}
+        onAddProperty={() => { setShowAddProperty(true); setEditingProperty(null); resetForm(); }}
+      />
 
       <div className="max-w-7xl mx-auto px-6 py-8">
         <div className="mb-8">
@@ -1332,10 +1326,12 @@ export default function PropertyManagerDashboard() {
         </div>
 
         <Tabs defaultValue="properties" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3 lg:w-[400px]">
+          <TabsList className="grid w-full grid-cols-5 lg:w-[600px]">
             <TabsTrigger value="properties">My Properties</TabsTrigger>
             <TabsTrigger value="matches">Tenant Matches</TabsTrigger>
+            <TabsTrigger value="communications">Communications</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
+            <TabsTrigger value="profile">Profile</TabsTrigger>
           </TabsList>
 
           <TabsContent value="properties" className="space-y-6">
@@ -1487,6 +1483,12 @@ export default function PropertyManagerDashboard() {
             </div>
           </TabsContent>
 
+          <TabsContent value="communications" className="space-y-6">
+            {user && (
+              <MessageCenter userId={getUserId(user)!} userType="landlord" />
+            )}
+          </TabsContent>
+
           <TabsContent value="analytics" className="space-y-6">
             <div className="grid md:grid-cols-2 gap-6">
               <Card>
@@ -1552,6 +1554,10 @@ export default function PropertyManagerDashboard() {
                 </CardContent>
               </Card>
             </div>
+          </TabsContent>
+
+          <TabsContent value="profile" className="space-y-6">
+            <ProfileManager />
           </TabsContent>
         </Tabs>
       </div>

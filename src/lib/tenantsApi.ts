@@ -14,9 +14,9 @@ export const tenantsApi = {
 
   updatePreferences: async (
     id: string,
-    preferences: Partial<ITenant["preferences"]>
+    data: { preferences: Partial<ITenant["preferences"]> }
   ): Promise<ApiResponse<ITenant>> => {
-    const response = await apiClient.put<ApiResponse<ITenant>>(`/tenants/${id}/preferences`, preferences)
+    const response = await apiClient.put<ApiResponse<ITenant>>(`/tenants/${id}/preferences`, data)
     return response.data
   },
 

@@ -184,7 +184,7 @@ export default function TenantDashboard() {
     
     try {
       const tenantId = user.tenantId || user._id
-      const res = await tenantsApi.updatePreferences(tenantId, preferences)
+      const res = await tenantsApi.updatePreferences(tenantId, { preferences })
       
       if (res.success) {
         // Refetch tenant data and matches

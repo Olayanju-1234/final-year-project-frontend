@@ -112,7 +112,7 @@ export default function TenantDashboard() {
     if (!user?._id) return;
     
     try {
-      const response = await tenantsApi.updatePreferences(user._id, preferences);
+      const response = await tenantsApi.updatePreferences(user._id, {preferences});
       if (response.success && response.data) {
         const convertedTenant = convertBackendToFrontend.tenant(response.data);
         setTenant(convertedTenant);
