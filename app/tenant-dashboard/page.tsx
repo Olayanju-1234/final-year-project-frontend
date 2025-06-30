@@ -223,7 +223,7 @@ export default function TenantDashboard() {
     
     try {
       const tenantId = user.tenantId || user._id
-      const res = await tenantsApi.saveProperty(tenantId, propertyId)
+      const res = await tenantsApi.addSavedProperty(tenantId, propertyId)
       
       if (res.success) {
         toast({

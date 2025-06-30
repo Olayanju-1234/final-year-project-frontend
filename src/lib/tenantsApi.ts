@@ -50,11 +50,6 @@ export const tenantsApi = {
     return response.data
   },
 
-  // Alias for addSavedProperty for consistency
-  saveProperty: async (id: string, propertyId: string): Promise<ApiResponse<ITenant>> => {
-    return tenantsApi.addSavedProperty(id, propertyId)
-  },
-
   // Request viewing for a property
   requestViewing: async (id: string, propertyId: string): Promise<ApiResponse<any>> => {
     const response = await apiClient.post<ApiResponse<any>>(`/tenants/${id}/viewing-requests`, { propertyId })

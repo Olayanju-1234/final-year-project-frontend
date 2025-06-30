@@ -2,10 +2,13 @@ import apiClient from "./api"
 import type { PropertyMatch, OptimizationResult, ApiResponse, OptimizationConstraints, OptimizationWeights } from "@/src/types"
 
 export const optimizationApi = {
-  findMatches: async (tenantId: string, maxResults?: number): Promise<ApiResponse<OptimizationResult>> => {
-    const params = { ...(maxResults && { maxResults }) }
-    const response = await apiClient.get<ApiResponse<OptimizationResult>>(`/optimization/matches/${tenantId}`, { params })
-    return response.data
+  findMatches: async (tenantId: string, maxResults: number = 10): Promise<ApiResponse<OptimizationResult>> => {
+    const response = await apiClient.get<{ data: OptimizationResult }>(`/optimization/matches/${tenantId}?maxResults=${maxResults}`);
+    return { success: true, data: response.data.data, message: '' };
+  },
+
+  findTenantMatchesForLandlord: async (landlordId: string, maxResults: number = 10): Promise<ApiResponse<any>> => {
+    return apiClient.get(`/optimization/landlord-matches/${landlordId}?maxResults=${maxResults}`);
   },
 
   runOptimization: async (

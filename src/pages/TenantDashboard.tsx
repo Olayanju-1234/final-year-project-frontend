@@ -10,11 +10,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
-import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import {
@@ -27,28 +24,15 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LoadingSpinner } from "@/src/components/ui/loading-spinner";
 import { Header } from "@/src/components/layout/Header";
-import { PropertyCard } from "@/src/components/properties/PropertyCard";
 import { PropertyMatching } from "@/src/components/properties/PropertyMatching";
 import { MessageCenter } from "@/src/components/communication/MessageCenter";
 import { ProfileManager } from "@/src/components/profile/ProfileManager";
-import { EmptyState } from "@/src/components/common/EmptyState";
 import { useAuth } from "@/src/context/AuthContext";
 import { tenantsApi } from "@/src/lib/tenantsApi";
 import { optimizationApi } from "@/src/lib/optimizationApi";
 import { convertBackendToFrontend } from "@/src/utils/typeConversion";
 import {
-  Search,
-  Star,
   Settings,
-  Calculator,
-  TrendingUp,
-  Wifi,
-  Car,
-  Shield,
-  Zap,
-  Droplets,
-  MessageSquare,
-  User,
 } from "lucide-react";
 import type { ITenant, OptimizationResult, IUser } from "@/src/types";
 
@@ -92,8 +76,7 @@ export default function TenantDashboard() {
       // Load optimization results
       const optimizationResponse = await optimizationApi.findMatches(user._id, 10);
       if (optimizationResponse.success && optimizationResponse.data) {
-        const convertedResult = convertBackendToFrontend.optimizationResult(optimizationResponse.data);
-        setOptimizationResult(convertedResult);
+        setOptimizationResult(optimizationResponse.data as OptimizationResult);
       }
     } catch (err) {
       setError('Failed to load tenant data. Please try again.');
@@ -123,11 +106,6 @@ export default function TenantDashboard() {
       setError('Failed to update preferences. Please try again.');
       console.error('Error updating preferences:', err);
     }
-  };
-
-  const handleProfileUpdate = (updatedUser: IUser) => {
-    // Update the user in the auth context
-    // This will be handled by the AuthContext when the profile is updated
   };
 
   if (loading) {
@@ -161,8 +139,8 @@ export default function TenantDashboard() {
           </h2>
           <p className="text-gray-600">
             {optimizationResult ? 
-              `AI-powered matching found ${optimizationResult.matches.length} properties that match your preferences` :
-              'Set up your preferences to get personalized property recommendations'
+              `AI-powered matching found ${optimizationResult.matches.length} properties that match your preferences.` :
+              'Set up your preferences to get personalized property recommendations.'
             }
           </p>
         </div>
@@ -176,9 +154,9 @@ export default function TenantDashboard() {
           </TabsList>
 
           <TabsContent value="matches" className="space-y-6">
-            {tenant && (
+            {optimizationResult && (
               <PropertyMatching 
-                tenantId={tenant._id} 
+                matches={optimizationResult.matches}
                 onPropertySelect={handlePropertySelect}
               />
             )}

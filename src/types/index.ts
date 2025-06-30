@@ -55,6 +55,18 @@ export interface ITenant {
     preferredBedrooms: number;
     preferredBathrooms: number;
     maxCommute?: number; // in minutes
+    features?: {
+      furnished: boolean;
+      petFriendly: boolean;
+      parking: boolean;
+      balcony: boolean;
+    };
+    utilities?: {
+      electricity: boolean;
+      water: boolean;
+      internet: boolean;
+      gas: boolean;
+    };
   };
   searchHistory: string[];
   savedProperties: string[];
@@ -114,6 +126,18 @@ export interface OptimizationConstraints {
   bedrooms: number;
   bathrooms: number;
   maxCommute?: number;
+  features?: {
+    furnished: boolean;
+    petFriendly: boolean;
+    parking: boolean;
+    balcony: boolean;
+  };
+  utilities?: {
+    electricity: boolean;
+    water: boolean;
+    internet: boolean;
+    gas: boolean;
+  };
 }
 
 export interface OptimizationWeights {

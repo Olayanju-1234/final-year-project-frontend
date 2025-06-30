@@ -46,6 +46,7 @@ import {
   MessageSquare,
 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { optimizationApi } from "@/src/lib/optimizationApi"
 
 function getUserId(user: { _id?: string; id?: string }): string | undefined {
   return user?._id || (user as any)?.id;
@@ -61,6 +62,8 @@ export default function PropertyManagerDashboard() {
   const { user, isLoading } = useAuth()
   const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState('properties')
+  const [tenantMatches, setTenantMatches] = useState<any[]>([])
+  const [loadingMatches, setLoadingMatches] = useState(false)
 
   // Get initial tab from URL params
   useEffect(() => {
@@ -69,6 +72,27 @@ export default function PropertyManagerDashboard() {
       setActiveTab(tabParam);
     }
   }, [searchParams]);
+
+    // Fetch tenant matches when tab is active
+    useEffect(() => {
+      const landlordId = getUserId(user || {});
+      if (activeTab === 'matches' && landlordId && user?.userType === 'landlord') {
+        setLoadingMatches(true);
+        optimizationApi.findTenantMatchesForLandlord(landlordId)
+          .then(response => {
+            if (response.success && Array.isArray(response.data)) {
+              setTenantMatches(response.data);
+            } else {
+              setTenantMatches([]);
+            }
+          })
+          .catch(err => {
+            console.error("Failed to fetch tenant matches", err);
+            setTenantMatches([]);
+          })
+          .finally(() => setLoadingMatches(false));
+      }
+    }, [activeTab, user]);
 
   // Form state for adding/editing property
   const [formData, setFormData] = useState({
@@ -99,17 +123,55 @@ export default function PropertyManagerDashboard() {
   })
 
   // Disable update if required fields are missing/invalid
-  const isUpdateDisabled =
-    !editingProperty ||
-    !formData.title || formData.title.length < 5 ||
-    !formData.description || formData.description.length < 20 ||
-    !formData.location.address ||
-    !formData.location.city ||
-    !formData.location.state ||
-    !formData.rent || isNaN(Number(formData.rent)) || Number(formData.rent) < 0 ||
-    !formData.bedrooms || isNaN(Number(formData.bedrooms)) || Number(formData.bedrooms) < 1 || Number(formData.bedrooms) > 20 ||
-    !formData.bathrooms || isNaN(Number(formData.bathrooms)) || Number(formData.bathrooms) < 1 || Number(formData.bathrooms) > 20 ||
-    !Array.isArray(formData.amenities) || formData.amenities.length === 0;
+  const getValidationErrors = () => {
+    const errors: string[] = [];
+    
+    if (!formData.title) errors.push("Title is required");
+    else if (formData.title.length < 5) errors.push("Title must be at least 5 characters");
+    
+    if (!formData.description) errors.push("Description is required");
+    else if (formData.description.length < 20) errors.push("Description must be at least 20 characters");
+    
+    if (!formData.location.address) errors.push("Address is required");
+    if (!formData.location.city) errors.push("City is required");
+    if (!formData.location.state) errors.push("State is required");
+    
+    if (!formData.rent) errors.push("Rent is required");
+    else if (isNaN(Number(formData.rent)) || Number(formData.rent) < 0) errors.push("Rent must be a positive number");
+    
+    if (!formData.bedrooms) errors.push("Number of bedrooms is required");
+    else if (isNaN(Number(formData.bedrooms)) || Number(formData.bedrooms) < 1 || Number(formData.bedrooms) > 20) 
+      errors.push("Number of bedrooms must be between 1 and 20");
+    
+    if (!formData.bathrooms) errors.push("Number of bathrooms is required");
+    else if (isNaN(Number(formData.bathrooms)) || Number(formData.bathrooms) < 1 || Number(formData.bathrooms) > 20)
+      errors.push("Number of bathrooms must be between 1 and 20");
+    
+    if (!Array.isArray(formData.amenities) || formData.amenities.length === 0)
+      errors.push("At least one amenity must be selected");
+    
+    return errors;
+  };
+
+  const validationErrors = getValidationErrors();
+  const isFormDisabled = validationErrors.length > 0;
+
+  // Function to show validation errors
+  const showValidationErrors = () => {
+    if (validationErrors.length > 0) {
+      toast({
+        title: "Please fix the following errors:",
+        description: (
+          <ul className="list-disc pl-4">
+            {validationErrors.map((error, index) => (
+              <li key={index}>{error}</li>
+            ))}
+          </ul>
+        ),
+        variant: "destructive",
+      });
+    }
+  };
 
   // Image upload state
   const [selectedImages, setSelectedImages] = useState<File[]>([])
@@ -264,25 +326,12 @@ export default function PropertyManagerDashboard() {
     if (!editingProperty) return
     if (isSubmitting) return
 
-    // Validation: prevent submitting if required fields are empty or invalid
-    if (
-      !formData.title || formData.title.length < 5 ||
-      !formData.description || formData.description.length < 20 ||
-      !formData.location.address ||
-      !formData.location.city ||
-      !formData.location.state ||
-      !formData.rent || isNaN(Number(formData.rent)) || Number(formData.rent) < 0 ||
-      !formData.bedrooms || isNaN(Number(formData.bedrooms)) || Number(formData.bedrooms) < 1 || Number(formData.bedrooms) > 20 ||
-      !formData.bathrooms || isNaN(Number(formData.bathrooms)) || Number(formData.bathrooms) < 1 || Number(formData.bathrooms) > 20 ||
-      !Array.isArray(formData.amenities) || formData.amenities.length === 0
-    ) {
-      console.log('[UpdateProperty] Validation failed - form data is invalid')
-      toast({
-        title: "Validation Error",
-        description: "Please fill all required fields correctly before updating.",
-        variant: "destructive",
-      })
-      return
+    // Use the same validation as create
+    const errors = getValidationErrors();
+    if (errors.length > 0) {
+      console.log('[UpdateProperty] Validation failed:', errors)
+      showValidationErrors();
+      return;
     }
 
     const currentFormData = { ...formData }
@@ -881,14 +930,24 @@ export default function PropertyManagerDashboard() {
                 </div>
 
                 <div className="flex space-x-4">
-                  <Button type="submit" className="flex-1" disabled={uploadingImages || isSubmitting || isUpdateDisabled}>
+                  <Button 
+                    type="submit" 
+                    className="flex-1" 
+                    disabled={uploadingImages || isSubmitting || isFormDisabled}
+                    onClick={(e) => {
+                      if (isFormDisabled) {
+                        e.preventDefault();
+                        showValidationErrors();
+                      }
+                    }}
+                  >
                     {uploadingImages || isSubmitting ? (
                       <>
                         <LoadingSpinner size="sm" className="mr-2" />
-                        Updating Property...
+                        {editingProperty ? "Updating Property..." : "Creating Property..."}
                       </>
                     ) : (
-                      "Update Property"
+                      editingProperty ? "Update Property" : "List Property"
                     )}
                   </Button>
                   <Button variant="outline" onClick={() => {
@@ -1226,14 +1285,24 @@ export default function PropertyManagerDashboard() {
                 </div>
 
                 <div className="flex space-x-4">
-                  <Button type="submit" className="flex-1" disabled={uploadingImages || isSubmitting || isUpdateDisabled}>
+                  <Button 
+                    type="submit" 
+                    className="flex-1" 
+                    disabled={uploadingImages || isSubmitting}
+                    onClick={(e) => {
+                      if (isFormDisabled) {
+                        e.preventDefault();
+                        showValidationErrors();
+                      }
+                    }}
+                  >
                     {uploadingImages || isSubmitting ? (
                       <>
                         <LoadingSpinner size="sm" className="mr-2" />
-                        Creating Property...
+                        {editingProperty ? "Updating Property..." : "Creating Property..."}
                       </>
                     ) : (
-                      "List Property"
+                      editingProperty ? "Update Property" : "List Property"
                     )}
                   </Button>
                   <Button variant="outline" onClick={() => {
@@ -1325,7 +1394,7 @@ export default function PropertyManagerDashboard() {
           </Card>
         </div>
 
-        <Tabs defaultValue="properties" className="space-y-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-5 lg:w-[600px]">
             <TabsTrigger value="properties">My Properties</TabsTrigger>
             <TabsTrigger value="matches">Tenant Matches</TabsTrigger>
@@ -1471,22 +1540,46 @@ export default function PropertyManagerDashboard() {
           </TabsContent>
 
           <TabsContent value="matches" className="space-y-6">
-            <div className="space-y-4">
-              <h3 className="text-xl font-semibold text-gray-900">Potential Tenant Matches</h3>
-              <Card>
-                <CardContent className="p-12 text-center">
-                  <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Matches Yet</h3>
-                  <p className="text-gray-600">Tenant matches will appear here once tenants start showing interest in your properties</p>
-                </CardContent>
-              </Card>
-            </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>Top Tenant Matches</CardTitle>
+                <CardDescription>
+                  These tenants have preferences that align with your available properties.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loadingMatches ? (
+                  <div className="flex justify-center items-center h-40">
+                    <LoadingSpinner />
+                  </div>
+                ) : tenantMatches.length === 0 ? (
+                  <p>No tenant matches found for your properties at the moment.</p>
+                ) : (
+                  <div className="space-y-6">
+                    {tenantMatches.map(propertyMatch => (
+                      <div key={propertyMatch.property._id}>
+                        <h3 className="font-bold text-lg mb-2">Matches for: {propertyMatch.property.title}</h3>
+                        <div className="space-y-4">
+                          {propertyMatch.matches.map((match: any) => (
+                            <div key={match.tenant._id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                              <div>
+                                <p className="font-semibold">{match.tenant.name}</p>
+                                <p className="text-sm text-gray-500">{match.preferencesSummary}</p>
+                              </div>
+                              <Badge variant="secondary">Match: {match.matchScore}%</Badge>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="communications" className="space-y-6">
-            {user && (
-              <MessageCenter userId={getUserId(user)!} userType="landlord" />
-            )}
+            <MessageCenter userId={getUserId(user || {}) || ''} userType="landlord" />
           </TabsContent>
 
           <TabsContent value="analytics" className="space-y-6">

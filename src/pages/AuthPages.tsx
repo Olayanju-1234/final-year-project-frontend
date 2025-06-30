@@ -15,6 +15,7 @@ import { LoadingSpinner } from "@/src/components/ui/loading-spinner"
 import { useApiMutation } from "@/src/hooks/useApi"
 import { loginUser, registerUser } from "@/src/lib/api"
 import { useToast } from "@/hooks/use-toast"
+import { useAuth } from "@/src/context/AuthContext"
 import { Home, Mail, Lock, User, Phone, MapPin, Eye, EyeOff, ArrowLeft } from "lucide-react"
 
 export default function AuthPages() {
@@ -25,6 +26,9 @@ export default function AuthPages() {
   const [userType, setUserType] = useState("tenant")
   const [currentView, setCurrentView] = useState("auth")
   const [defaultTab, setDefaultTab] = useState("signin")
+  const { login, user } = useAuth()
+  const [loginLoading, setLoginLoading] = useState(false)
+  const [loginError, setLoginError] = useState<string | null>(null)
 
   // Set initial tab based on URL parameter
   useEffect(() => {
@@ -36,9 +40,14 @@ export default function AuthPages() {
     }
   }, [searchParams])
 
-  // TODO: Connect to your backend auth endpoints
-  const { mutate: login, loading: loginLoading, error: loginError } = useApiMutation(loginUser)
   const { mutate: register, loading: registerLoading, error: registerError } = useApiMutation(registerUser)
+
+  // Redirect if user is already logged in
+  useEffect(() => {
+    if (user) {
+      router.push(user.userType === "tenant" ? "/tenant-dashboard" : "/property-manager-dashboard")
+    }
+  }, [user, router])
 
   const handleTabChange = (value: string) => {
     // Update the URL to reflect the new tab
@@ -48,21 +57,24 @@ export default function AuthPages() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
+    setLoginLoading(true)
+    setLoginError(null)
     const formData = new FormData(e.target as HTMLFormElement)
     const email = formData.get("email") as string
     const password = formData.get("password") as string
 
-    const result = await login({ email, password })
-    if (result) {
-      // Show success toast
+    try {
+      await login({ email, password })
+      // On successful login, the user will be redirected by the effect hook
       toast({
         title: "Login Successful!",
         description: "Welcome back to RentMatch. Redirecting you to your dashboard...",
         variant: "default",
       })
-      
-      // TODO: Handle successful login (store token, redirect, etc.)
-      console.log("Login successful:", result)
+    } catch (error: any) {
+      setLoginError(error.message || "Failed to login. Please check your credentials.")
+    } finally {
+      setLoginLoading(false)
     }
   }
 
@@ -86,15 +98,15 @@ export default function AuthPages() {
 
     const result = await register(userData)
     if (result) {
-      // Show success toast
+      // After successful registration, log the user in
+      await login({ email: userData.email, password: userData.password })
+
       toast({
         title: "Registration Successful!",
-        description: `Welcome to RentMatch! Your ${userType} account has been created successfully.`,
+        description: `Welcome to RentMatch! Your ${userType} account has been created.`,
         variant: "default",
       })
-      
-      // TODO: Handle successful registration
-      console.log("Registration successful:", result)
+      // The user will be redirected by the effect hook after login
     }
   }
 
@@ -224,7 +236,6 @@ export default function AuthPages() {
                     Forgot password?
                   </button>
                 </div>
-                {loginError && <div className="text-sm text-red-600 bg-red-50 p-2 rounded">{loginError}</div>}
                 <Button type="submit" className="w-full" disabled={loginLoading}>
                   {loginLoading ? (
                     <>
