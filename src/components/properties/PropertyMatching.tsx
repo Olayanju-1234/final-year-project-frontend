@@ -68,6 +68,13 @@ export const PropertyMatching: React.FC<PropertyMatchingProps> = ({
                     </Button>
                   </div>
 
+                  {/* Show reason if present */}
+                  {match.reason && (
+                    <div className="mb-2 text-sm text-blue-700 font-medium">
+                      Reason: {match.reason}
+                    </div>
+                  )}
+
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <MapPin className="w-4 h-4" />

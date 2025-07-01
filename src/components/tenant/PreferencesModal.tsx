@@ -1,34 +1,52 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
-import { Slider } from "@/components/ui/slider"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { LoadingSpinner } from "@/src/components/ui/loading-spinner"
-import { useToast } from "@/hooks/use-toast"
-import { tenantsApi } from "@/src/lib/tenantsApi"
-import { useAuth } from "@/src/context/AuthContext"
-import { Wifi, Car, Shield, Zap, Droplets } from "lucide-react"
-import type { ITenant } from "@/src/types"
+import { useState, useEffect } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { LoadingSpinner } from "@/src/components/ui/loading-spinner";
+import { useToast } from "@/hooks/use-toast";
+import { tenantsApi } from "@/src/lib/tenantsApi";
+import { useAuth } from "@/src/context/AuthContext";
+import { Wifi, Car, Shield, Zap, Droplets } from "lucide-react";
+import type { ITenant } from "@/src/types";
 
 interface PreferencesModalProps {
-  isOpen: boolean
-  onClose: () => void
-  onPreferencesSaved: () => void
+  isOpen: boolean;
+  onClose: () => void;
+  onPreferencesSaved: () => void;
+  preferences?: ITenant["preferences"];
 }
 
-export function PreferencesModal({ isOpen, onClose, onPreferencesSaved }: PreferencesModalProps) {
-  const [budget, setBudget] = useState([500000, 1000000])
-  const [location, setLocation] = useState("")
-  const [bedrooms, setBedrooms] = useState("2")
-  const [bathrooms, setBathrooms] = useState("2")
-  const [selectedAmenities, setSelectedAmenities] = useState<string[]>([])
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const { toast } = useToast()
-  const { user } = useAuth()
+export function PreferencesModal({
+  isOpen,
+  onClose,
+  onPreferencesSaved,
+  preferences,
+}: PreferencesModalProps) {
+  const [budget, setBudget] = useState([500000, 1000000]);
+  const [location, setLocation] = useState("");
+  const [bedrooms, setBedrooms] = useState("2");
+  const [bathrooms, setBathrooms] = useState("2");
+  const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { toast } = useToast();
+  const { user } = useAuth();
 
   // Add state for features and utilities
   const [features, setFeatures] = useState({
@@ -36,13 +54,13 @@ export function PreferencesModal({ isOpen, onClose, onPreferencesSaved }: Prefer
     petFriendly: false,
     parking: false,
     balcony: false,
-  })
+  });
   const [utilities, setUtilities] = useState({
     electricity: true,
     water: true,
     internet: false,
     gas: false,
-  })
+  });
 
   const amenitiesList = [
     { id: "wifi", label: "WiFi", icon: Wifi },
@@ -50,27 +68,59 @@ export function PreferencesModal({ isOpen, onClose, onPreferencesSaved }: Prefer
     { id: "security", label: "Security", icon: Shield },
     { id: "generator", label: "Generator", icon: Zap },
     { id: "water", label: "Water Supply", icon: Droplets },
-  ]
+  ];
 
   const handleAmenityChange = (amenityId: string, checked: boolean) => {
     if (checked) {
-      setSelectedAmenities(prev => [...prev, amenityId])
+      setSelectedAmenities((prev) => [...prev, amenityId]);
     } else {
-      setSelectedAmenities(prev => prev.filter(id => id !== amenityId))
+      setSelectedAmenities((prev) => prev.filter((id) => id !== amenityId));
     }
-  }
+  };
 
   // Handlers for features and utilities
-  const handleFeatureChange = (feature: keyof typeof features, checked: boolean) => {
-    setFeatures(prev => ({ ...prev, [feature]: checked }))
-  }
-  const handleUtilityChange = (utility: keyof typeof utilities, checked: boolean) => {
-    setUtilities(prev => ({ ...prev, [utility]: checked }))
-  }
+  const handleFeatureChange = (
+    feature: keyof typeof features,
+    checked: boolean
+  ) => {
+    setFeatures((prev) => ({ ...prev, [feature]: checked }));
+  };
+  const handleUtilityChange = (
+    utility: keyof typeof utilities,
+    checked: boolean
+  ) => {
+    setUtilities((prev) => ({ ...prev, [utility]: checked }));
+  };
+
+  useEffect(() => {
+    if (preferences && isOpen) {
+      setBudget([preferences.budget.min, preferences.budget.max]);
+      setLocation(preferences.preferredLocation);
+      setBedrooms(preferences.preferredBedrooms.toString());
+      setBathrooms(preferences.preferredBathrooms.toString());
+      setSelectedAmenities(preferences.requiredAmenities);
+      setFeatures(
+        preferences.features || {
+          furnished: false,
+          petFriendly: false,
+          parking: false,
+          balcony: false,
+        }
+      );
+      setUtilities(
+        preferences.utilities || {
+          electricity: false,
+          water: false,
+          internet: false,
+          gas: false,
+        }
+      );
+    }
+  }, [preferences, isOpen]);
 
   const handleSavePreferences = async () => {
     // Use user._id or user.tenantId (whichever is available)
-    const tenantId = user?.tenantId || user?._id
+    const tenantId = user?.tenantId || user?._id;
 
     // Robust validation
     if (!tenantId) {
@@ -78,51 +128,61 @@ export function PreferencesModal({ isOpen, onClose, onPreferencesSaved }: Prefer
         title: "Missing Information",
         description: "User ID is missing. Please log in again.",
         variant: "destructive",
-      })
-      return
+      });
+      return;
     }
     if (!location || location.trim() === "") {
       toast({
         title: "Missing Information",
         description: "Preferred location is required.",
         variant: "destructive",
-      })
-      return
+      });
+      return;
     }
-    if (!budget || !Array.isArray(budget) || budget.length !== 2 || isNaN(budget[0]) || isNaN(budget[1])) {
+    if (
+      !budget ||
+      !Array.isArray(budget) ||
+      budget.length !== 2 ||
+      isNaN(budget[0]) ||
+      isNaN(budget[1])
+    ) {
       toast({
         title: "Missing Information",
         description: "Budget range is required.",
         variant: "destructive",
-      })
-      return
+      });
+      return;
     }
     if (!bedrooms || isNaN(Number(bedrooms))) {
       toast({
         title: "Missing Information",
         description: "Preferred bedrooms is required.",
         variant: "destructive",
-      })
-      return
+      });
+      return;
     }
     if (!bathrooms || isNaN(Number(bathrooms))) {
       toast({
         title: "Missing Information",
         description: "Preferred bathrooms is required.",
         variant: "destructive",
-      })
-      return
+      });
+      return;
     }
-    if (!selectedAmenities || !Array.isArray(selectedAmenities) || selectedAmenities.length === 0) {
+    if (
+      !selectedAmenities ||
+      !Array.isArray(selectedAmenities) ||
+      selectedAmenities.length === 0
+    ) {
       toast({
         title: "Missing Information",
         description: "At least one required amenity must be selected.",
         variant: "destructive",
-      })
-      return
+      });
+      return;
     }
 
-    setIsSubmitting(true)
+    setIsSubmitting(true);
     try {
       const preferences = {
         budget: {
@@ -135,37 +195,39 @@ export function PreferencesModal({ isOpen, onClose, onPreferencesSaved }: Prefer
         preferredBathrooms: Number(bathrooms),
         features,
         utilities,
-      }
-      console.log("Submitting preferences payload:", preferences)
+      };
+      console.log("Submitting preferences payload:", preferences);
 
-      const response = await tenantsApi.updatePreferences(tenantId, { preferences })
-      
+      const response = await tenantsApi.updatePreferences(tenantId, {
+        preferences,
+      });
+
       if (response.success) {
         toast({
           title: "Preferences Saved!",
           description: "Your preferences have been saved successfully.",
           variant: "default",
-        })
-        onPreferencesSaved()
-        onClose()
+        });
+        onPreferencesSaved();
+        onClose();
       } else {
         toast({
           title: "Error",
           description: response.message || "Failed to save preferences",
           variant: "destructive",
-        })
+        });
       }
     } catch (error) {
-      console.error("Error saving preferences:", error)
+      console.error("Error saving preferences:", error);
       toast({
         title: "Error",
         description: "Failed to save preferences. Please try again.",
         variant: "destructive",
-      })
+      });
     } finally {
-      setIsSubmitting(false)
+      setIsSubmitting(false);
     }
-  }
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -173,14 +235,16 @@ export function PreferencesModal({ isOpen, onClose, onPreferencesSaved }: Prefer
         <DialogHeader>
           <DialogTitle>Welcome to RentMatch! 🏠</DialogTitle>
           <DialogDescription>
-            Let's set up your preferences to help us find the perfect property for you.
-            You can always update these later in your dashboard.
+            Let's set up your preferences to help us find the perfect property
+            for you. You can always update these later in your dashboard.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6">
           <div>
-            <Label className="text-base font-medium">Budget Range (Annual Rent)</Label>
+            <Label className="text-base font-medium">
+              Budget Range (Annual Rent)
+            </Label>
             <div className="mt-2">
               <Slider
                 value={budget}
@@ -201,7 +265,9 @@ export function PreferencesModal({ isOpen, onClose, onPreferencesSaved }: Prefer
           </div>
 
           <div>
-            <Label className="text-base font-medium">Preferred Location *</Label>
+            <Label className="text-base font-medium">
+              Preferred Location *
+            </Label>
             <Select value={location} onValueChange={setLocation}>
               <SelectTrigger className="mt-2">
                 <SelectValue placeholder="Select your preferred location" />
@@ -221,7 +287,9 @@ export function PreferencesModal({ isOpen, onClose, onPreferencesSaved }: Prefer
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label className="text-base font-medium">Preferred Bedrooms</Label>
+              <Label className="text-base font-medium">
+                Preferred Bedrooms
+              </Label>
               <Select value={bedrooms} onValueChange={setBedrooms}>
                 <SelectTrigger className="mt-2">
                   <SelectValue />
@@ -235,7 +303,9 @@ export function PreferencesModal({ isOpen, onClose, onPreferencesSaved }: Prefer
               </Select>
             </div>
             <div>
-              <Label className="text-base font-medium">Preferred Bathrooms</Label>
+              <Label className="text-base font-medium">
+                Preferred Bathrooms
+              </Label>
               <Select value={bathrooms} onValueChange={setBathrooms}>
                 <SelectTrigger className="mt-2">
                   <SelectValue />
@@ -251,16 +321,23 @@ export function PreferencesModal({ isOpen, onClose, onPreferencesSaved }: Prefer
           </div>
 
           <div>
-            <Label className="text-base font-medium mb-4 block">Required Amenities</Label>
+            <Label className="text-base font-medium mb-4 block">
+              Required Amenities
+            </Label>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               {amenitiesList.map((amenity) => (
                 <div key={amenity.id} className="flex items-center space-x-2">
                   <Checkbox
                     id={amenity.id}
                     checked={selectedAmenities.includes(amenity.id)}
-                    onCheckedChange={(checked) => handleAmenityChange(amenity.id, checked as boolean)}
+                    onCheckedChange={(checked) =>
+                      handleAmenityChange(amenity.id, checked as boolean)
+                    }
                   />
-                  <Label htmlFor={amenity.id} className="flex items-center cursor-pointer">
+                  <Label
+                    htmlFor={amenity.id}
+                    className="flex items-center cursor-pointer"
+                  >
                     <amenity.icon className="h-4 w-4 mr-2" />
                     {amenity.label}
                   </Label>
@@ -283,7 +360,12 @@ export function PreferencesModal({ isOpen, onClose, onPreferencesSaved }: Prefer
                   <Checkbox
                     id={feature.id}
                     checked={features[feature.id as keyof typeof features]}
-                    onCheckedChange={(checked) => handleFeatureChange(feature.id as keyof typeof features, checked as boolean)}
+                    onCheckedChange={(checked) =>
+                      handleFeatureChange(
+                        feature.id as keyof typeof features,
+                        checked as boolean
+                      )
+                    }
                   />
                   <Label htmlFor={feature.id} className="cursor-pointer">
                     {feature.label}
@@ -295,7 +377,9 @@ export function PreferencesModal({ isOpen, onClose, onPreferencesSaved }: Prefer
 
           {/* Utilities */}
           <div>
-            <Label className="text-base font-medium mb-4 block">Utilities Included</Label>
+            <Label className="text-base font-medium mb-4 block">
+              Utilities Included
+            </Label>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[
                 { id: "electricity", label: "Electricity" },
@@ -307,7 +391,12 @@ export function PreferencesModal({ isOpen, onClose, onPreferencesSaved }: Prefer
                   <Checkbox
                     id={utility.id}
                     checked={utilities[utility.id as keyof typeof utilities]}
-                    onCheckedChange={(checked) => handleUtilityChange(utility.id as keyof typeof utilities, checked as boolean)}
+                    onCheckedChange={(checked) =>
+                      handleUtilityChange(
+                        utility.id as keyof typeof utilities,
+                        checked as boolean
+                      )
+                    }
                   />
                   <Label htmlFor={utility.id} className="cursor-pointer">
                     {utility.label}
@@ -323,7 +412,9 @@ export function PreferencesModal({ isOpen, onClose, onPreferencesSaved }: Prefer
               onClick={handleSavePreferences}
               disabled={isSubmitting}
             >
-              {isSubmitting ? <LoadingSpinner size="sm" className="mr-2" /> : null}
+              {isSubmitting ? (
+                <LoadingSpinner size="sm" className="mr-2" />
+              ) : null}
               Save Preferences & Find Properties
             </Button>
             <Button
@@ -338,5 +429,5 @@ export function PreferencesModal({ isOpen, onClose, onPreferencesSaved }: Prefer
         </div>
       </DialogContent>
     </Dialog>
-  )
-} 
+  );
+}

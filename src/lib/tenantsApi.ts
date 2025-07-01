@@ -51,8 +51,20 @@ export const tenantsApi = {
   },
 
   // Request viewing for a property
-  requestViewing: async (id: string, propertyId: string): Promise<ApiResponse<any>> => {
-    const response = await apiClient.post<ApiResponse<any>>(`/tenants/${id}/viewing-requests`, { propertyId })
-    return response.data
+  requestViewing: async (
+    id: string,
+    payload: {
+      propertyId: string,
+      landlordId: string,
+      requestedDate: string,
+      requestedTime: string,
+      message?: string
+    }
+  ): Promise<ApiResponse<any>> => {
+    const response = await apiClient.post<ApiResponse<any>>(
+      `/tenants/${id}/viewing-requests`,
+      payload
+    );
+    return response.data;
   },
 } 

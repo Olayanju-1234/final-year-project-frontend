@@ -175,10 +175,71 @@ export default function TenantDashboard() {
               </CardHeader>
               <CardContent className="space-y-6">
                 {tenant && (
-                  <PreferencesForm 
-                    preferences={tenant.preferences}
-                    onUpdate={handleUpdatePreferences}
-                  />
+                  <>
+                    {/* Summary Card */}
+                    <div className="mb-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                          <div className="font-medium">Budget Range</div>
+                          <div>
+                            ₦{tenant.preferences.budget.min.toLocaleString()} - ₦{tenant.preferences.budget.max.toLocaleString()}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="font-medium">Preferred Location</div>
+                          <div>{tenant.preferences.preferredLocation}</div>
+                        </div>
+                        <div>
+                          <div className="font-medium">Bedrooms</div>
+                          <div>{tenant.preferences.preferredBedrooms}</div>
+                        </div>
+                        <div>
+                          <div className="font-medium">Bathrooms</div>
+                          <div>{tenant.preferences.preferredBathrooms}</div>
+                        </div>
+                      </div>
+                      {/* Required Amenities */}
+                      <div>
+                        <div className="font-medium">Required Amenities</div>
+                        <div className="flex flex-wrap gap-2 mt-1">
+                          {tenant.preferences.requiredAmenities.map((amenity) => (
+                            <span key={amenity} className="px-2 py-1 bg-gray-100 rounded text-sm">{amenity}</span>
+                          ))}
+                        </div>
+                      </div>
+                      {/* Preferred Features */}
+                      {tenant.preferences.features && (
+                        <div>
+                          <div className="font-medium mt-4">Preferred Features</div>
+                          <div className="flex flex-wrap gap-2 mt-1">
+                            {Object.entries(tenant.preferences.features)
+                              .filter(([_, v]) => v)
+                              .map(([feature]) => (
+                                <span key={feature} className="px-2 py-1 bg-gray-100 rounded text-sm">{feature}</span>
+                              ))}
+                          </div>
+                        </div>
+                      )}
+                      {/* Preferred Utilities */}
+                      {tenant.preferences.utilities && (
+                        <div>
+                          <div className="font-medium mt-4">Preferred Utilities</div>
+                          <div className="flex flex-wrap gap-2 mt-1">
+                            {Object.entries(tenant.preferences.utilities)
+                              .filter(([_, v]) => v)
+                              .map(([utility]) => (
+                                <span key={utility} className="px-2 py-1 bg-gray-100 rounded text-sm">{utility}</span>
+                              ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    {/* Edit Form */}
+                    <PreferencesForm 
+                      preferences={tenant.preferences}
+                      onUpdate={handleUpdatePreferences}
+                    />
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -209,8 +270,32 @@ interface PreferencesFormProps {
 }
 
 const PreferencesForm: React.FC<PreferencesFormProps> = ({ preferences, onUpdate }) => {
-  const [localPreferences, setLocalPreferences] = useState(preferences);
+  // Always ensure all keys are present for features/utilities
+  function normalizePreferences(prefs: ITenant['preferences']): ITenant['preferences'] {
+    return {
+      ...prefs,
+      features: {
+        furnished: prefs.features?.furnished ?? false,
+        petFriendly: prefs.features?.petFriendly ?? false,
+        parking: prefs.features?.parking ?? false,
+        balcony: prefs.features?.balcony ?? false,
+      },
+      utilities: {
+        electricity: prefs.utilities?.electricity ?? false,
+        water: prefs.utilities?.water ?? false,
+        internet: prefs.utilities?.internet ?? false,
+        gas: prefs.utilities?.gas ?? false,
+      },
+    };
+  }
+
+  const [localPreferences, setLocalPreferences] = useState(() => normalizePreferences(preferences));
   const [saving, setSaving] = useState(false);
+
+  // Sync localPreferences with prop changes
+  useEffect(() => {
+    setLocalPreferences(normalizePreferences(preferences));
+  }, [preferences]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -316,34 +401,37 @@ const PreferencesForm: React.FC<PreferencesFormProps> = ({ preferences, onUpdate
         </div>
       </div>
 
-      {/* Amenities */}
-      <div className="space-y-3">
-        <Label className="text-base font-medium">Required Amenities</Label>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          {['wifi', 'parking', 'generator', 'security', 'gym', 'pool'].map((amenity) => (
-            <div key={amenity} className="flex items-center space-x-2">
-              <Checkbox
-                id={amenity}
-                checked={localPreferences.requiredAmenities.includes(amenity)}
-                onCheckedChange={(checked) => {
-                  if (checked) {
-                    setLocalPreferences({
-                      ...localPreferences,
-                      requiredAmenities: [...localPreferences.requiredAmenities, amenity]
-                    });
-                  } else {
-                    setLocalPreferences({
-                      ...localPreferences,
-                      requiredAmenities: localPreferences.requiredAmenities.filter(a => a !== amenity)
-                    });
-                  }
-                }}
-              />
-              <Label htmlFor={amenity} className="text-sm capitalize">
-                {amenity}
-              </Label>
-            </div>
+      {/* Required Amenities */}
+      <div>
+        <div className="font-medium">Required Amenities</div>
+        <div className="flex flex-wrap gap-2 mt-1">
+          {localPreferences.requiredAmenities.map((amenity) => (
+            <span key={amenity} className="px-2 py-1 bg-gray-100 rounded text-sm">{amenity}</span>
           ))}
+        </div>
+      </div>
+
+      {/* Preferred Features */}
+      <div>
+        <div className="font-medium mt-4">Preferred Features</div>
+        <div className="flex flex-wrap gap-2 mt-1">
+          {Object.entries(localPreferences.features || {})
+            .filter(([_, v]) => v)
+            .map(([feature]) => (
+              <span key={feature} className="px-2 py-1 bg-gray-100 rounded text-sm">{feature}</span>
+            ))}
+        </div>
+      </div>
+
+      {/* Preferred Utilities */}
+      <div>
+        <div className="font-medium mt-4">Preferred Utilities</div>
+        <div className="flex flex-wrap gap-2 mt-1">
+          {Object.entries(localPreferences.utilities || {})
+            .filter(([_, v]) => v)
+            .map(([utility]) => (
+              <span key={utility} className="px-2 py-1 bg-gray-100 rounded text-sm">{utility}</span>
+            ))}
         </div>
       </div>
 

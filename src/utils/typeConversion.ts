@@ -8,8 +8,12 @@ export const convertBackendToFrontend = {
       ...backendTenant,
       _id: backendTenant._id?.toString() || backendTenant._id,
       userId: backendTenant.userId?.toString() || backendTenant.userId,
-      searchHistory: backendTenant.searchHistory?.map((id: any) => id?.toString() || id) || [],
-      savedProperties: backendTenant.savedProperties?.map((id: any) => id?.toString() || id) || [],
+      searchHistory:
+        backendTenant.searchHistory?.map((id: any) => id?.toString() || id) ||
+        [],
+      savedProperties:
+        backendTenant.savedProperties?.map((id: any) => id?.toString() || id) ||
+        [],
     };
   },
 
@@ -18,11 +22,12 @@ export const convertBackendToFrontend = {
     if (!backendResult) return null;
     return {
       ...backendResult,
-      matches: backendResult.matches?.map((match: any) => ({
-        ...match,
-        propertyId: match.propertyId?.toString() || match.propertyId,
-        tenantId: match.tenantId?.toString() || match.tenantId,
-      })) || [],
+      matches:
+        backendResult.matches?.map((match: any) => ({
+          ...match,
+          propertyId: match.propertyId?.toString() || match.propertyId,
+          tenantId: match.tenantId?.toString() || match.tenantId,
+        })) || [],
     };
   },
 
@@ -31,7 +36,8 @@ export const convertBackendToFrontend = {
     if (!backendMatch) return null;
     return {
       ...backendMatch,
-      propertyId: backendMatch.propertyId?.toString() || backendMatch.propertyId,
+      propertyId:
+        backendMatch.propertyId?.toString() || backendMatch.propertyId,
       tenantId: backendMatch.tenantId?.toString() || backendMatch.tenantId,
     };
   },
@@ -42,9 +48,11 @@ export const convertBackendToFrontend = {
     return {
       ...backendMessage,
       _id: backendMessage._id?.toString() || backendMessage._id,
-      fromUserId: backendMessage.fromUserId?.toString() || backendMessage.fromUserId,
+      fromUserId:
+        backendMessage.fromUserId?.toString() || backendMessage.fromUserId,
       toUserId: backendMessage.toUserId?.toString() || backendMessage.toUserId,
-      propertyId: backendMessage.propertyId?.toString() || backendMessage.propertyId,
+      propertyId:
+        backendMessage.propertyId?.toString() || backendMessage.propertyId,
     };
   },
 
@@ -55,18 +63,24 @@ export const convertBackendToFrontend = {
       ...backendViewing,
       _id: backendViewing._id?.toString() || backendViewing._id,
       tenantId: backendViewing.tenantId?.toString() || backendViewing.tenantId,
-      landlordId: backendViewing.landlordId?.toString() || backendViewing.landlordId,
-      propertyId: backendViewing.propertyId?.toString() || backendViewing.propertyId,
+      landlordId:
+        backendViewing.landlordId?.toString() || backendViewing.landlordId,
+      propertyId:
+        backendViewing.propertyId?.toString() || backendViewing.propertyId,
     };
   },
 
   // Convert backend IProperty to frontend IProperty
   property: (backendProperty: any): any => {
     if (!backendProperty) return null;
+    let landlordId = backendProperty.landlordId;
+    if (typeof landlordId === 'object' && landlordId !== null) {
+      landlordId = landlordId._id || landlordId.id || '';
+    }
     return {
       ...backendProperty,
       _id: backendProperty._id?.toString() || backendProperty._id,
-      landlordId: backendProperty.landlordId?.toString() || backendProperty.landlordId,
+      landlordId: landlordId?.toString() || '',
     };
   },
 
@@ -82,48 +96,65 @@ export const convertBackendToFrontend = {
 
 // Generic function to convert any backend response
 export const convertApiResponse = <T>(response: any): T => {
-  if (!response || typeof response !== 'object') return response;
-  
+  if (!response || typeof response !== "object") return response;
+
   // Handle arrays
   if (Array.isArray(response)) {
-    return response.map(item => convertApiResponse(item)) as T;
+    return response.map((item) => convertApiResponse(item)) as T;
   }
-  
+
   // Handle objects with _id (likely a model)
   if (response._id) {
     const converted: any = { ...response };
-    
+
     // Convert _id to string
-    if (response._id && typeof response._id === 'object' && response._id.toString) {
+    if (
+      response._id &&
+      typeof response._id === "object" &&
+      response._id.toString
+    ) {
       converted._id = response._id.toString();
     }
-    
+
     // Convert other ObjectId fields
-    const objectIdFields = ['userId', 'tenantId', 'landlordId', 'propertyId', 'fromUserId', 'toUserId'];
-    objectIdFields.forEach(field => {
-      if (response[field] && typeof response[field] === 'object' && response[field].toString) {
+    const objectIdFields = [
+      "userId",
+      "tenantId",
+      "landlordId",
+      "propertyId",
+      "fromUserId",
+      "toUserId",
+    ];
+    objectIdFields.forEach((field) => {
+      if (
+        response[field] &&
+        typeof response[field] === "object" &&
+        response[field].toString
+      ) {
         converted[field] = response[field].toString();
       }
     });
-    
+
     // Convert arrays of ObjectIds
-    const arrayFields = ['searchHistory', 'savedProperties'];
-    arrayFields.forEach(field => {
+    const arrayFields = ["searchHistory", "savedProperties"];
+    arrayFields.forEach((field) => {
       if (Array.isArray(response[field])) {
-        converted[field] = response[field].map((item: any) => 
-          item && typeof item === 'object' && item.toString ? item.toString() : item
+        converted[field] = response[field].map((item: any) =>
+          item && typeof item === "object" && item.toString
+            ? item.toString()
+            : item
         );
       }
     });
-    
+
     return converted as T;
   }
-  
+
   // Recursively convert nested objects
   const converted: any = {};
   for (const [key, value] of Object.entries(response)) {
     converted[key] = convertApiResponse(value);
   }
-  
+
   return converted as T;
-}; 
+};
