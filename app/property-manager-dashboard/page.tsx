@@ -20,7 +20,7 @@ import { Header } from "@/src/components/layout/Header"
 import { propertiesApi } from "@/src/lib/propertiesApi"
 import { useAuth } from "@/src/context/AuthContext"
 import { convertBackendToFrontend } from "@/src/utils/typeConversion"
-import type { IProperty } from "@/src/types"
+import type { IProperty, IViewing } from "@/src/types"
 import {
   Home,
   Plus,
@@ -47,9 +47,22 @@ import {
 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { optimizationApi } from "@/src/lib/optimizationApi"
+import { communicationApi } from "@/src/lib/communicationApi"
 
 function getUserId(user: { _id?: string; id?: string }): string | undefined {
   return user?._id || (user as any)?.id;
+}
+
+function isProperty(obj: any): obj is { title: string } {
+  return typeof obj === 'object' && obj !== null && 'title' in obj;
+}
+
+function isUser(obj: any): obj is { name: string } {
+  return typeof obj === 'object' && obj !== null && 'name' in obj;
+}
+
+function hasName(obj: any): obj is { name: string } {
+  return typeof obj === 'object' && obj !== null && 'name' in obj && typeof obj.name === 'string';
 }
 
 export default function PropertyManagerDashboard() {
@@ -65,34 +78,40 @@ export default function PropertyManagerDashboard() {
   const [tenantMatches, setTenantMatches] = useState<any[]>([])
   const [loadingMatches, setLoadingMatches] = useState(false)
 
+  // State for landlord viewing requests
+  const [viewingRequests, setViewingRequests] = useState<IViewing[]>([])
+  const [loadingViewings, setLoadingViewings] = useState(false)
+  const [viewingsError, setViewingsError] = useState(null)
+
   // Get initial tab from URL params
   useEffect(() => {
-    const tabParam = searchParams?.get('tab');
+    const tabParam = searchParams?.get('tab')
     if (tabParam && ['properties', 'matches', 'communications', 'analytics', 'profile'].includes(tabParam)) {
-      setActiveTab(tabParam);
+      setActiveTab(tabParam)
     }
-  }, [searchParams]);
+  }, [searchParams])
 
-    // Fetch tenant matches when tab is active
-    useEffect(() => {
-      const landlordId = getUserId(user || {});
-      if (activeTab === 'matches' && landlordId && user?.userType === 'landlord') {
-        setLoadingMatches(true);
-        optimizationApi.findTenantMatchesForLandlord(landlordId)
-          .then(response => {
-            if (response.success && Array.isArray(response.data)) {
-              setTenantMatches(response.data);
-            } else {
-              setTenantMatches([]);
-            }
-          })
-          .catch(err => {
-            console.error("Failed to fetch tenant matches", err);
-            setTenantMatches([]);
-          })
-          .finally(() => setLoadingMatches(false));
-      }
-    }, [activeTab, user]);
+  // Fetch tenant matches for landlord (always fetch when user is landlord)
+  useEffect(() => {
+    const landlordId = getUserId(user || {})
+    console.log('DEBUG: useEffect running for tenant matches', { user, landlordId })
+    if (landlordId && user?.userType === 'landlord') {
+      setLoadingMatches(true)
+      optimizationApi.findTenantMatchesForLandlord(landlordId)
+        .then(response => {
+          let dataArray = []
+          if (response.success && response.data) {
+            dataArray = Array.isArray(response.data) ? response.data : [response.data]
+          }
+          setTenantMatches(dataArray)
+        })
+        .catch(err => {
+          console.error("Failed to fetch tenant matches", err)
+          setTenantMatches([])
+        })
+        .finally(() => setLoadingMatches(false))
+    }
+  }, [user ? user._id : null, user ? user.userType : null])
 
   // Form state for adding/editing property
   const [formData, setFormData] = useState({
@@ -124,37 +143,37 @@ export default function PropertyManagerDashboard() {
 
   // Disable update if required fields are missing/invalid
   const getValidationErrors = () => {
-    const errors: string[] = [];
+    const errors: string[] = []
     
-    if (!formData.title) errors.push("Title is required");
-    else if (formData.title.length < 5) errors.push("Title must be at least 5 characters");
+    if (!formData.title) errors.push("Title is required")
+    else if (formData.title.length < 5) errors.push("Title must be at least 5 characters")
     
-    if (!formData.description) errors.push("Description is required");
-    else if (formData.description.length < 20) errors.push("Description must be at least 20 characters");
+    if (!formData.description) errors.push("Description is required")
+    else if (formData.description.length < 20) errors.push("Description must be at least 20 characters")
     
-    if (!formData.location.address) errors.push("Address is required");
-    if (!formData.location.city) errors.push("City is required");
-    if (!formData.location.state) errors.push("State is required");
+    if (!formData.location.address) errors.push("Address is required")
+    if (!formData.location.city) errors.push("City is required")
+    if (!formData.location.state) errors.push("State is required")
     
-    if (!formData.rent) errors.push("Rent is required");
-    else if (isNaN(Number(formData.rent)) || Number(formData.rent) < 0) errors.push("Rent must be a positive number");
+    if (!formData.rent) errors.push("Rent is required")
+    else if (isNaN(Number(formData.rent)) || Number(formData.rent) < 0) errors.push("Rent must be a positive number")
     
-    if (!formData.bedrooms) errors.push("Number of bedrooms is required");
+    if (!formData.bedrooms) errors.push("Number of bedrooms is required")
     else if (isNaN(Number(formData.bedrooms)) || Number(formData.bedrooms) < 1 || Number(formData.bedrooms) > 20) 
-      errors.push("Number of bedrooms must be between 1 and 20");
+      errors.push("Number of bedrooms must be between 1 and 20")
     
-    if (!formData.bathrooms) errors.push("Number of bathrooms is required");
+    if (!formData.bathrooms) errors.push("Number of bathrooms is required")
     else if (isNaN(Number(formData.bathrooms)) || Number(formData.bathrooms) < 1 || Number(formData.bathrooms) > 20)
-      errors.push("Number of bathrooms must be between 1 and 20");
+      errors.push("Number of bathrooms must be between 1 and 20")
     
     if (!Array.isArray(formData.amenities) || formData.amenities.length === 0)
-      errors.push("At least one amenity must be selected");
+      errors.push("At least one amenity must be selected")
     
-    return errors;
-  };
+    return errors
+  }
 
-  const validationErrors = getValidationErrors();
-  const isFormDisabled = validationErrors.length > 0;
+  const validationErrors = getValidationErrors()
+  const isFormDisabled = validationErrors.length > 0
 
   // Function to show validation errors
   const showValidationErrors = () => {
@@ -169,9 +188,9 @@ export default function PropertyManagerDashboard() {
           </ul>
         ),
         variant: "destructive",
-      });
+      })
     }
-  };
+  }
 
   // Image upload state
   const [selectedImages, setSelectedImages] = useState<File[]>([])
@@ -180,38 +199,38 @@ export default function PropertyManagerDashboard() {
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Add new state at the top of the component
-  const [existingImages, setExistingImages] = useState<string[]>([]);
-  const [imagesToKeep, setImagesToKeep] = useState<string[]>([]);
-  const [imagesToDelete, setImagesToDelete] = useState<string[]>([]);
+  const [existingImages, setExistingImages] = useState<string[]>([])
+  const [imagesToKeep, setImagesToKeep] = useState<string[]>([])
+  const [imagesToDelete, setImagesToDelete] = useState<string[]>([])
 
   // Image removal functions
   const removeExistingImage = (url: string) => {
-    setImagesToKeep(prev => prev.filter(img => img !== url));
-    setImagesToDelete(prev => [...prev, url]);
-  };
+    setImagesToKeep(prev => prev.filter(img => img !== url))
+    setImagesToDelete(prev => [...prev, url])
+  }
 
   const removeNewImage = (index: number) => {
-    setSelectedImages(prev => prev.filter((_, i) => i !== index));
+    setSelectedImages(prev => prev.filter((_, i) => i !== index))
     setImagePreviewUrls(prev => {
-      const newUrls = prev.filter((_, i) => i !== index);
-      URL.revokeObjectURL(prev[index]);
-      return newUrls;
-    });
-  };
+      const newUrls = prev.filter((_, i) => i !== index)
+      URL.revokeObjectURL(prev[index])
+      return newUrls
+    })
+  }
 
   // Fetch properties on component mount
   useEffect(() => {
-    if (!user || isLoading || user.userType !== "landlord") return;
-    const landlordId = getUserId(user);
+    if (!user || isLoading || user.userType !== "landlord") return
+    const landlordId = getUserId(user)
     if (!landlordId) {
-      console.warn("[Dashboard] Landlord user has no id or _id!", user);
-      return;
+      console.warn("[Dashboard] Landlord user has no id or _id!", user)
+      return
     }
-    fetchProperties(landlordId);
-  }, [user, isLoading]);
+    fetchProperties(landlordId)
+  }, [user, isLoading])
 
   const fetchProperties = async (landlordIdParam?: string) => {
-    const landlordId = landlordIdParam || getUserId(user || {});
+    const landlordId = landlordIdParam || getUserId(user || {})
     console.log('[fetchProperties] called', user)
     if (!user || user.userType !== 'landlord' || !landlordId) {
       console.log('[fetchProperties] No user or not landlord or no landlordId')
@@ -224,11 +243,11 @@ export default function PropertyManagerDashboard() {
       console.log('[fetchProperties] API response:', response)
       if (response.success && response.data) {
         // Always treat as array
-        const dataArray = Array.isArray(response.data) ? response.data : [response.data];
-        console.log('[fetchProperties] Raw API data:', dataArray);
-        const convertedProperties = dataArray.map((property: any) => convertBackendToFrontend.property(property));
-        console.log('[fetchProperties] Converted properties:', convertedProperties);
-        setProperties(convertedProperties);
+        const dataArray = Array.isArray(response.data) ? response.data : [response.data]
+        console.log('[fetchProperties] Raw API data:', dataArray)
+        const convertedProperties = dataArray.map((property: any) => convertBackendToFrontend.property(property))
+        console.log('[fetchProperties] Converted properties:', convertedProperties)
+        setProperties(convertedProperties)
         console.log('[fetchProperties] Properties set:', convertedProperties.length)
       } else {
         setError(response.message || "Failed to fetch properties")
@@ -327,11 +346,11 @@ export default function PropertyManagerDashboard() {
     if (isSubmitting) return
 
     // Use the same validation as create
-    const errors = getValidationErrors();
+    const errors = getValidationErrors()
     if (errors.length > 0) {
       console.log('[UpdateProperty] Validation failed:', errors)
-      showValidationErrors();
-      return;
+      showValidationErrors()
+      return
     }
 
     const currentFormData = { ...formData }
@@ -936,8 +955,8 @@ export default function PropertyManagerDashboard() {
                     disabled={uploadingImages || isSubmitting || isFormDisabled}
                     onClick={(e) => {
                       if (isFormDisabled) {
-                        e.preventDefault();
-                        showValidationErrors();
+                        e.preventDefault()
+                        showValidationErrors()
                       }
                     }}
                   >
@@ -1291,8 +1310,8 @@ export default function PropertyManagerDashboard() {
                     disabled={uploadingImages || isSubmitting}
                     onClick={(e) => {
                       if (isFormDisabled) {
-                        e.preventDefault();
-                        showValidationErrors();
+                        e.preventDefault()
+                        showValidationErrors()
                       }
                     }}
                   >
@@ -1401,6 +1420,7 @@ export default function PropertyManagerDashboard() {
             <TabsTrigger value="communications">Communications</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
             <TabsTrigger value="profile">Profile</TabsTrigger>
+            <TabsTrigger value="viewing-requests">Viewing Requests</TabsTrigger>
           </TabsList>
 
           <TabsContent value="properties" className="space-y-6">
@@ -1651,6 +1671,59 @@ export default function PropertyManagerDashboard() {
 
           <TabsContent value="profile" className="space-y-6">
             <ProfileManager />
+          </TabsContent>
+
+          <TabsContent value="viewing-requests" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Viewing Requests</CardTitle>
+                <CardDescription>
+                  All viewing requests for your properties.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loadingViewings ? (
+                  <div className="flex justify-center items-center h-40">
+                    <LoadingSpinner />
+                  </div>
+                ) : viewingRequests.length === 0 ? (
+                  <p>No viewing requests found.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {viewingRequests.map((viewing) => (
+                      <Card key={viewing._id} className="hover:shadow-md transition-shadow">
+                        <CardContent className="p-4">
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <Badge>{viewing.status}</Badge>
+                              </div>
+                              <h4 className="font-semibold">
+                                Property: {isProperty(viewing.propertyId) ? viewing.propertyId.title : viewing.propertyId}
+                              </h4>
+                              <p className="text-sm text-muted-foreground mt-1">
+                                Tenant: {hasName(viewing.tenantId) ? viewing.tenantId.name : 'Unknown User'}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                Date: {viewing.requestedDate?.slice(0, 10)}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                Time: {viewing.requestedTime}
+                              </p>
+                              {viewing.notes && (
+                                <p className="text-sm text-muted-foreground mt-1">
+                                  Notes: {viewing.notes}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>

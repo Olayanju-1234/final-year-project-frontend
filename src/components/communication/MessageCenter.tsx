@@ -50,6 +50,26 @@ export const MessageCenter: React.FC<MessageCenterProps> = ({
     loadData();
   }, [userId, activeTab]);
 
+  useEffect(() => {
+    if (userType === 'landlord') {
+      setLoading(true);
+      setError(null);
+      communicationApi.getViewings(undefined, undefined, undefined, 'landlord')
+        .then((response) => {
+          if (response.success) {
+            setViewings((response.data ?? []).map((v: any) => convertBackendToFrontend.viewing(v)));
+          } else {
+            setViewings([]);
+          }
+        })
+        .catch((err) => {
+          setError('Failed to fetch viewing requests.');
+          setViewings([]);
+        })
+        .finally(() => setLoading(false));
+    }
+  }, [userType]);
+
   const loadData = async () => {
     setLoading(true);
     setError(null);
@@ -192,8 +212,8 @@ export const MessageCenter: React.FC<MessageCenterProps> = ({
     });
   };
 
-  const getUserDisplayName = (user: IUser | string) => {
-    if (typeof user === 'string') {
+  const getUserDisplayName = (user: IUser | string | null | undefined) => {
+    if (!user || typeof user === 'string') {
       return 'Unknown User';
     }
     return user.name || user.email || 'Unknown User';

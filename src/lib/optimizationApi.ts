@@ -8,7 +8,8 @@ export const optimizationApi = {
   },
 
   findTenantMatchesForLandlord: async (landlordId: string, maxResults: number = 10): Promise<ApiResponse<any>> => {
-    return apiClient.get(`/optimization/landlord-matches/${landlordId}?maxResults=${maxResults}`);
+    const response = await apiClient.get(`/optimization/landlord-matches/${landlordId}?maxResults=${maxResults}`);
+    return response.data;
   },
 
   runOptimization: async (
