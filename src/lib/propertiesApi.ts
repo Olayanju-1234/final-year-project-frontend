@@ -60,4 +60,14 @@ export const propertiesApi = {
     )
     return response.data
   },
+
+  getRandom: async (limit = 1): Promise<ApiResponse<IProperty[]>> => {
+    const response = await apiClient.get<ApiResponse<IProperty[]>>(`/properties/random`, { params: { limit } })
+    return response.data
+  },
+
+  getStats: async (): Promise<ApiResponse<any>> => {
+    const response = await apiClient.get<ApiResponse<any>>("/properties/stats")
+    return response.data
+  },
 } 

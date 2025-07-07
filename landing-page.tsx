@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -17,10 +17,30 @@ import {
   X,
   Calculator,
 } from "lucide-react"
+import { propertiesApi } from "@/src/lib/propertiesApi"
+import type { IProperty } from "@/src/types"
 
 export default function LandingPage() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const router = useRouter();
+
+  const [propertyStats, setPropertyStats] = useState([
+    { number: "-", label: "Properties Listed" },
+    { number: "-", label: "Available Properties" },
+    { number: "-", label: "Total Views" },
+    { number: "-", label: "Total Inquiries" },
+  ])
+  const [topCities, setTopCities] = useState<Array<{ city: string, count: number }>>([])
+  const [optimizationStats, setOptimizationStats] = useState([
+    { number: "-", label: "Optimizations Run" },
+    { number: "-", label: "Match Accuracy" },
+    { number: "-", label: "Optimization Accuracy" },
+    { number: "-", label: "Avg. Response Time" },
+  ])
+  const [randomProperty, setRandomProperty] = useState<IProperty | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [featuredProperties, setFeaturedProperties] = useState<IProperty[]>([])
 
   const features = [
     {
@@ -36,12 +56,50 @@ export default function LandingPage() {
     },
   ]
 
-  const stats = [
-    { number: "50+", label: "Properties Listed" },
-    { number: "25+", label: "Successful Matches" },
-    { number: "95%", label: "Match Accuracy" },
-    { number: "<30s", label: "Optimization Time" },
+  // Optimization stat subtitles for display
+  const optimizationSubtitles = [
+    'Per optimization run',
+    'Linear programming precision',
+    'Requirements met rate',
+    'Algorithm runs completed',
   ]
+
+  // Fetch exactly 3 properties for featured section
+  useEffect(() => {
+    async function fetchData() {
+      setLoading(true)
+      setError(null)
+      try {
+        const [statsRes, randomRes] = await Promise.all([
+          propertiesApi.getStats(),
+          propertiesApi.getRandom(3),
+        ])
+        if (statsRes.success && statsRes.data) {
+          setPropertyStats([
+            { number: statsRes.data.totalProperties ?? "-", label: "Properties Listed" },
+            { number: statsRes.data.availableProperties ?? "-", label: "Available Properties" },
+            { number: statsRes.data.totalViews ?? "-", label: "Total Views" },
+            { number: statsRes.data.totalInquiries ?? "-", label: "Total Inquiries" },
+          ])
+          setOptimizationStats([
+            { number: statsRes.data.totalOptimizations ?? "-", label: "Optimizations Run" },
+            { number: statsRes.data.averageMatchScore ?? "-", label: "Match Accuracy" },
+            { number: statsRes.data.optimizationAccuracy ?? "-", label: "Optimization Accuracy" },
+            { number: statsRes.data.avgResponseTime ?? "-", label: "Avg. Response Time" },
+          ])
+        }
+        if (randomRes.success && Array.isArray(randomRes.data) && randomRes.data.length > 0) {
+          setFeaturedProperties(randomRes.data.slice(0, 3))
+          setRandomProperty(randomRes.data[0])
+        }
+      } catch (err: any) {
+        setError("Failed to load landing page data.")
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchData()
+  }, [])
 
   return (
     <div className="min-h-screen bg-white">
@@ -138,40 +196,162 @@ export default function LandingPage() {
               <div className="bg-white rounded-2xl shadow-2xl p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-semibold text-gray-900">Your Perfect Match</h3>
-                  <Badge className="bg-green-100 text-green-800">94% Match</Badge>
+                  <Badge className="bg-green-100 text-green-800">
+                    {randomProperty ? `${randomProperty.title}` : "-"}
+                  </Badge>
                 </div>
-                <img
-                  src="/placeholder.svg?height=200&width=400"
-                  alt="Property"
-                  className="w-full h-48 object-cover rounded-lg mb-4"
-                />
-                <div className="space-y-2">
-                  <h4 className="font-semibold">Modern 2BR Apartment</h4>
-                  <div className="flex items-center text-gray-600">
-                    <MapPin className="h-4 w-4 mr-1" />
-                    <span className="text-sm">Victoria Island, Lagos</span>
-                  </div>
-                  <p className="text-2xl font-bold text-blue-600">₦850,000/year</p>
-                </div>
+                {loading ? (
+                  <div className="w-full h-48 flex items-center justify-center text-gray-400">Loading...</div>
+                ) : error ? (
+                  <div className="w-full h-48 flex items-center justify-center text-red-400">{error}</div>
+                ) : randomProperty ? (
+                  <>
+                    <img
+                      src={randomProperty.images?.[0] || "/placeholder.svg?height=200&width=400"}
+                      alt={randomProperty.title}
+                      className="w-full h-48 object-cover rounded-lg mb-4"
+                    />
+                    <div className="space-y-2">
+                      <h4 className="font-semibold">{randomProperty.title}</h4>
+                      <div className="flex items-center text-gray-600">
+                        <MapPin className="h-4 w-4 mr-1" />
+                        <span className="text-sm">{randomProperty.location?.address}, {randomProperty.location?.city}, {randomProperty.location?.state}</span>
+                      </div>
+                      <p className="text-2xl font-bold text-blue-600">₦{randomProperty.rent?.toLocaleString()}/year</p>
+                    </div>
+                  </>
+                ) : (
+                  <div className="w-full h-48 flex items-center justify-center text-gray-400">No property found.</div>
+                )}
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Stats Section */}
-      <section className="py-16 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">Project Demonstration Stats</h2>
+      {/* Project Demonstration Stats Block */}
+      <section className="py-12 bg-white">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-8">
+            <h2 className="text-2xl font-bold mb-2">Project Demonstration Stats</h2>
             <p className="text-gray-600">Current performance metrics of the optimization model</p>
           </div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
-            {stats.map((stat, index) => (
-              <div key={index} className="text-center">
-                <div className="text-3xl lg:text-4xl font-bold text-blue-600 mb-2">{stat.number}</div>
-                <div className="text-gray-600">{stat.label}</div>
-              </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 justify-center">
+            <Card className="border-0 shadow-lg">
+              <CardContent className="p-6 text-center">
+                <div className="text-3xl font-extrabold text-blue-600 mb-1">{propertyStats[0]?.number}</div>
+                <div className="text-gray-600">Properties Listed</div>
+              </CardContent>
+            </Card>
+            <Card className="border-0 shadow-lg">
+              <CardContent className="p-6 text-center">
+                <div className="text-3xl font-extrabold text-blue-600 mb-1">{propertyStats[1]?.number}</div>
+                <div className="text-gray-600">Available Properties</div>
+              </CardContent>
+            </Card>
+            <Card className="border-0 shadow-lg">
+              <CardContent className="p-6 text-center">
+                <div className="text-3xl font-extrabold text-blue-600 mb-1">{optimizationStats[3]?.number}</div>
+                <div className="text-gray-600">Optimization Time</div>
+              </CardContent>
+            </Card>
+            <Card className="border-0 shadow-lg">
+              <CardContent className="p-6 text-center">
+                <div className="text-3xl font-extrabold text-blue-600 mb-1">{optimizationStats[1]?.number}</div>
+                <div className="text-gray-600">Match Accuracy</div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </section>
+
+      {/* Linear Programming Performance Block */}
+      <section className="py-16 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-10 mt-0">
+            <h2 className="text-3xl font-bold mb-2">Linear Programming Performance</h2>
+            <p className="text-gray-600">Real-time optimization algorithm metrics</p>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-8 justify-center mb-16">
+            <Card className="border-0 shadow-lg">
+              <CardContent className="p-6 text-center">
+                <div className="text-4xl font-extrabold text-blue-600 mb-1">{optimizationStats[0]?.number}</div>
+                <div className="text-gray-600 text-base font-medium mb-1">Avg. Execution Time</div>
+                <div className="text-xs text-gray-400 text-center">Per optimization run</div>
+              </CardContent>
+            </Card>
+            <Card className="border-0 shadow-lg">
+              <CardContent className="p-6 text-center">
+                <div className="text-4xl font-extrabold text-purple-600 mb-1">{optimizationStats[2]?.number}</div>
+                <div className="text-gray-600 text-base font-medium mb-1">Constraint Satisfaction</div>
+                <div className="text-xs text-gray-400 text-center">Requirements met rate</div>
+              </CardContent>
+            </Card>
+            <Card className="border-0 shadow-lg">
+              <CardContent className="p-6 text-center">
+                <div className="text-4xl font-extrabold text-red-600 mb-1">{optimizationStats[0]?.number}</div>
+                <div className="text-gray-600 text-base font-medium mb-1">Total Optimizations</div>
+                <div className="text-xs text-gray-400 text-center">Algorithm runs completed</div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </section>
+
+      {/* Property Stats Block */}
+      <section className="py-12 bg-white">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-8">
+            <h2 className="text-2xl font-bold mb-2">Property Stats</h2>
+            <p className="text-gray-600">Platform activity metrics</p>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-2 gap-8 justify-center">
+            <Card className="border-0 shadow-lg">
+              <CardContent className="p-6 text-center">
+                <div className="text-3xl font-extrabold text-blue-600 mb-1">{propertyStats[2]?.number}</div>
+                <div className="text-gray-600">Total Views</div>
+              </CardContent>
+            </Card>
+            <Card className="border-0 shadow-lg">
+              <CardContent className="p-6 text-center">
+                <div className="text-3xl font-extrabold text-blue-600 mb-1">{propertyStats[3]?.number}</div>
+                <div className="text-gray-600">Total Inquiries</div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </section>
+
+      {/* Featured Properties Section */}
+      <section className="py-16 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-10">
+            <h2 className="text-3xl font-bold mb-2">Featured Properties</h2>
+            <p className="text-gray-600 mb-8">Discover amazing properties from our database</p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8">
+            {featuredProperties.map((property, idx) => (
+              <Card key={property._id || idx} className="shadow-lg border-0">
+                <CardContent className="p-0">
+                  <img src={property.images?.[0] || "/placeholder.svg?height=200&width=400"} alt={property.title} className="w-full h-48 object-cover rounded-t-lg" />
+                  <div className="p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-semibold text-lg truncate">{property.title}</span>
+                      <span className="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-1 rounded-full">{property.bedrooms}BR • {property.bathrooms}BA</span>
+                    </div>
+                    <div className="flex items-center text-gray-600 mb-2">
+                      <MapPin className="h-4 w-4 mr-1" />
+                      <span className="text-sm truncate">{property.location?.city}, {property.location?.state}</span>
+                    </div>
+                    <div className="text-xl font-bold text-blue-600 mb-2">₦{property.rent?.toLocaleString()}/year</div>
+                    <div className="flex flex-wrap gap-2">
+                      {property.amenities?.slice(0, 3).map((am, i) => (
+                        <span key={i} className="bg-gray-100 text-gray-700 text-xs px-2 py-1 rounded-full">{am}</span>
+                      ))}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             ))}
           </div>
         </div>

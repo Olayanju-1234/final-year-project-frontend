@@ -3,8 +3,28 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Home, Shield, CheckCircle, MapPin, Clock, ArrowRight, Calculator, BarChart3 } from "lucide-react"
+import { useEffect, useState } from "react"
+import { propertiesApi } from "@/src/lib/propertiesApi"
+import type { IProperty } from "@/src/types"
 
 export default function LandingPage() {
+  const [propertyStats, setPropertyStats] = useState([
+    { number: "-", label: "Properties Listed" },
+    { number: "-", label: "Available Properties" },
+    { number: "-", label: "Total Views" },
+    { number: "-", label: "Total Inquiries" },
+  ])
+  const [topCities, setTopCities] = useState<Array<{ city: string, count: number }>>([])
+  const [optimizationStats, setOptimizationStats] = useState([
+    { number: "-", label: "Optimizations Run" },
+    { number: "-", label: "Match Accuracy" },
+    { number: "-", label: "Optimization Accuracy" },
+    { number: "-", label: "Avg. Response Time" },
+  ])
+  const [randomProperty, setRandomProperty] = useState<IProperty | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
   const features = [
     {
       icon: Calculator,
@@ -31,12 +51,43 @@ export default function LandingPage() {
     },
   ]
 
-  const stats = [
-    { number: "50+", label: "Properties Listed" },
-    { number: "25+", label: "Successful Matches" },
-    { number: "95%", label: "Match Accuracy" },
-    { number: "<30s", label: "Optimization Time" },
-  ]
+  useEffect(() => {
+    async function fetchData() {
+      setLoading(true)
+      setError(null)
+      try {
+        const [statsRes, randomRes] = await Promise.all([
+          propertiesApi.getStats(),
+          propertiesApi.getRandom(),
+        ])
+        // Stats
+        if (statsRes.success && statsRes.data) {
+          setPropertyStats([
+            { number: statsRes.data.totalProperties ?? "-", label: "Properties Listed" },
+            { number: statsRes.data.availableProperties ?? "-", label: "Available Properties" },
+            { number: statsRes.data.totalViews ?? "-", label: "Total Views" },
+            { number: statsRes.data.totalInquiries ?? "-", label: "Total Inquiries" },
+          ])
+          setTopCities(Array.isArray(statsRes.data.topCities) ? statsRes.data.topCities.map((c: any) => ({ city: c._id, count: c.count })) : [])
+          setOptimizationStats([
+            { number: statsRes.data.totalOptimizations ?? "-", label: "Optimizations Run" },
+            { number: statsRes.data.averageMatchScore ?? "-", label: "Match Accuracy" },
+            { number: statsRes.data.optimizationAccuracy ?? "-", label: "Optimization Accuracy" },
+            { number: statsRes.data.avgResponseTime ?? "-", label: "Avg. Response Time" },
+          ])
+        }
+        // Random property
+        if (randomRes.success && Array.isArray(randomRes.data) && randomRes.data.length > 0) {
+          setRandomProperty(randomRes.data[0])
+        }
+      } catch (err: any) {
+        setError("Failed to load landing page data.")
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchData()
+  }, [])
 
   return (
     <div className="min-h-screen bg-white">
@@ -101,22 +152,34 @@ export default function LandingPage() {
               <div className="bg-white rounded-2xl shadow-2xl p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-semibold text-gray-900">Optimization Result</h3>
-                  <Badge className="bg-green-100 text-green-800">94% Match</Badge>
+                  <Badge className="bg-green-100 text-green-800">
+                    {randomProperty ? `${randomProperty.title}` : "-"}
+                  </Badge>
                 </div>
-                <img
-                  src="/placeholder.svg?height=200&width=400"
-                  alt="Property"
-                  className="w-full h-48 object-cover rounded-lg mb-4"
-                />
-                <div className="space-y-2">
-                  <h4 className="font-semibold">Modern 2BR Apartment</h4>
-                  <div className="flex items-center text-gray-600">
-                    <MapPin className="h-4 w-4 mr-1" />
-                    <span className="text-sm">Victoria Island, Lagos</span>
-                  </div>
-                  <p className="text-2xl font-bold text-blue-600">₦850,000/year</p>
-                  <div className="text-xs text-gray-500">Optimized using Linear Programming constraints</div>
-                </div>
+                {loading ? (
+                  <div className="w-full h-48 flex items-center justify-center text-gray-400">Loading...</div>
+                ) : error ? (
+                  <div className="w-full h-48 flex items-center justify-center text-red-400">{error}</div>
+                ) : randomProperty ? (
+                  <>
+                    <img
+                      src={randomProperty.images?.[0] || "/placeholder.svg?height=200&width=400"}
+                      alt={randomProperty.title}
+                      className="w-full h-48 object-cover rounded-lg mb-4"
+                    />
+                    <div className="space-y-2">
+                      <h4 className="font-semibold">{randomProperty.title}</h4>
+                      <div className="flex items-center text-gray-600">
+                        <MapPin className="h-4 w-4 mr-1" />
+                        <span className="text-sm">{randomProperty.location?.address}, {randomProperty.location?.city}, {randomProperty.location?.state}</span>
+                      </div>
+                      <p className="text-2xl font-bold text-blue-600">₦{randomProperty.rent?.toLocaleString()}/year</p>
+                      <div className="text-xs text-gray-500">Optimized using Linear Programming constraints</div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="w-full h-48 flex items-center justify-center text-gray-400">No property found.</div>
+                )}
               </div>
             </div>
           </div>
@@ -127,13 +190,37 @@ export default function LandingPage() {
       <section className="py-16 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">Project Demonstration Stats</h2>
-            <p className="text-gray-600">Current performance metrics of the optimization model</p>
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">Property Stats</h2>
+            <p className="text-gray-600">Key metrics about the property listings</p>
           </div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
-            {stats.map((stat, index) => (
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-8 mb-8">
+            {propertyStats.map((stat, index) => (
               <div key={index} className="text-center">
                 <div className="text-3xl lg:text-4xl font-bold text-blue-600 mb-2">{stat.number}</div>
+                <div className="text-gray-600">{stat.label}</div>
+              </div>
+            ))}
+          </div>
+          {topCities.length > 0 && (
+            <div className="mb-12">
+              <h3 className="text-lg font-semibold text-gray-800 mb-2">Top Cities</h3>
+              <div className="flex flex-wrap gap-4 justify-center">
+                {topCities.map((city, idx) => (
+                  <span key={idx} className="inline-block bg-blue-100 text-blue-800 rounded-full px-4 py-1 text-sm font-medium">
+                    {city.city || "-"} ({city.count})
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="text-center mb-12 mt-16">
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">Optimization Stats</h2>
+            <p className="text-gray-600">Performance metrics of the optimization model</p>
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-8">
+            {optimizationStats.map((stat, index) => (
+              <div key={index} className="text-center">
+                <div className="text-3xl lg:text-4xl font-bold text-indigo-600 mb-2">{stat.number}</div>
                 <div className="text-gray-600">{stat.label}</div>
               </div>
             ))}
