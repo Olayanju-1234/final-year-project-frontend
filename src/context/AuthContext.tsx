@@ -1,7 +1,7 @@
 "use client"
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import { loginUser, registerUser, getProfile, logoutUser as logoutUserApi, updateProfile } from "@/src/lib/api"
 import type { LoginRequest, RegisterRequest, IUser } from "@/src/types"
 
@@ -17,11 +17,16 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
+// Routes that don't require redirection
+const PUBLIC_ROUTES = ['/auth-pages', '/', '/landing-page']
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<IUser | null>(null)
   const [token, setToken] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [isInitialized, setIsInitialized] = useState(false)
   const router = useRouter()
+  const pathname = usePathname()
 
   useEffect(() => {
     console.log('[AuthContext] useEffect running')
@@ -67,11 +72,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
       
       setIsLoading(false)
+      setIsInitialized(true)
       console.log('[AuthContext] isLoading set to false')
     }
 
     initializeAuth()
   }, [])
+
+  // Auto-redirect logic when user is loaded and auth is initialized
+  useEffect(() => {
+    if (!isInitialized || isLoading) return
+
+    // If user is logged in and on a public route, redirect to appropriate dashboard
+    if (user && pathname && PUBLIC_ROUTES.includes(pathname)) {
+      console.log('[AuthContext] User logged in, redirecting to dashboard')
+      if (user.userType === "tenant") {
+        router.push("/tenant-dashboard")
+      } else if (user.userType === "landlord") {
+        router.push("/property-manager-dashboard")
+      }
+    }
+  }, [user, isInitialized, isLoading, pathname, router])
 
   useEffect(() => {
     console.log('[AuthContext] user:', user, 'isLoading:', isLoading)
