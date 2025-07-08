@@ -19,10 +19,14 @@ import {
 } from "lucide-react"
 import { propertiesApi } from "@/src/lib/propertiesApi"
 import type { IProperty } from "@/src/types"
+import { Skeleton } from "@/components/ui/skeleton"
+import { useToast } from "@/hooks/use-toast"
+import { Toaster } from "@/components/ui/toaster"
 
 export default function LandingPage() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const router = useRouter();
+  const { toast } = useToast();
 
   const [propertyStats, setPropertyStats] = useState([
     { number: "-", label: "Properties Listed" },
@@ -94,12 +98,17 @@ export default function LandingPage() {
         }
       } catch (err: any) {
         setError("Failed to load landing page data.")
+        toast({
+          title: "Error loading data",
+          description: "Could not fetch stats or properties. Please try again.",
+          variant: "destructive",
+        });
       } finally {
         setLoading(false)
       }
     }
     fetchData()
-  }, [])
+  }, [toast])
 
   return (
     <div className="min-h-screen bg-white">
@@ -237,30 +246,43 @@ export default function LandingPage() {
             <p className="text-gray-600">Current performance metrics of the optimization model</p>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 justify-center">
-            <Card className="border-0 shadow-lg">
-              <CardContent className="p-6 text-center">
-                <div className="text-3xl font-extrabold text-blue-600 mb-1">{propertyStats[0]?.number}</div>
-                <div className="text-gray-600">Properties Listed</div>
-              </CardContent>
-            </Card>
-            <Card className="border-0 shadow-lg">
-              <CardContent className="p-6 text-center">
-                <div className="text-3xl font-extrabold text-blue-600 mb-1">{propertyStats[1]?.number}</div>
-                <div className="text-gray-600">Available Properties</div>
-              </CardContent>
-            </Card>
-            <Card className="border-0 shadow-lg">
-              <CardContent className="p-6 text-center">
-                <div className="text-3xl font-extrabold text-blue-600 mb-1">{optimizationStats[3]?.number}</div>
-                <div className="text-gray-600">Optimization Time</div>
-              </CardContent>
-            </Card>
-            <Card className="border-0 shadow-lg">
-              <CardContent className="p-6 text-center">
-                <div className="text-3xl font-extrabold text-blue-600 mb-1">{optimizationStats[1]?.number}</div>
-                <div className="text-gray-600">Match Accuracy</div>
-              </CardContent>
-            </Card>
+            {loading ? (
+              Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-24 w-full rounded-lg" />
+              ))
+            ) : error ? (
+              <div className="col-span-4 flex flex-col items-center justify-center">
+                <span className="text-red-500 mb-2">{error}</span>
+                <Button onClick={() => window.location.reload()}>Retry</Button>
+              </div>
+            ) : (
+              <>
+                <Card className="border-0 shadow-lg">
+                  <CardContent className="p-6 text-center">
+                    <div className="text-3xl font-extrabold text-blue-600 mb-1">{propertyStats[0]?.number}</div>
+                    <div className="text-gray-600">Properties Listed</div>
+                  </CardContent>
+                </Card>
+                <Card className="border-0 shadow-lg">
+                  <CardContent className="p-6 text-center">
+                    <div className="text-3xl font-extrabold text-blue-600 mb-1">{propertyStats[1]?.number}</div>
+                    <div className="text-gray-600">Available Properties</div>
+                  </CardContent>
+                </Card>
+                <Card className="border-0 shadow-lg">
+                  <CardContent className="p-6 text-center">
+                    <div className="text-3xl font-extrabold text-blue-600 mb-1">{optimizationStats[3]?.number}</div>
+                    <div className="text-gray-600">Optimization Time</div>
+                  </CardContent>
+                </Card>
+                <Card className="border-0 shadow-lg">
+                  <CardContent className="p-6 text-center">
+                    <div className="text-3xl font-extrabold text-blue-600 mb-1">{optimizationStats[1]?.number}</div>
+                    <div className="text-gray-600">Match Accuracy</div>
+                  </CardContent>
+                </Card>
+              </>
+            )}
           </div>
         </div>
       </section>
@@ -330,7 +352,16 @@ export default function LandingPage() {
             <p className="text-gray-600 mb-8">Discover amazing properties from our database</p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8">
-            {featuredProperties.map((property, idx) => (
+            {loading ? (
+              Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-64 w-full rounded-lg" />
+              ))
+            ) : error ? (
+              <div className="col-span-3 flex flex-col items-center justify-center">
+                <span className="text-red-500 mb-2">{error}</span>
+                <Button onClick={() => window.location.reload()}>Retry</Button>
+              </div>
+            ) : featuredProperties.map((property, idx) => (
               <Card key={property._id || idx} className="shadow-lg border-0">
                 <CardContent className="p-0">
                   <img src={property.images?.[0] || "/placeholder.svg?height=200&width=400"} alt={property.title} className="w-full h-48 object-cover rounded-t-lg" />
@@ -451,6 +482,8 @@ export default function LandingPage() {
           </div>
         </div>
       </footer>
+
+      <Toaster />
     </div>
   )
 }
