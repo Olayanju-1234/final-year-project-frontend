@@ -49,11 +49,11 @@ import { useAuth } from "@/src/context/AuthContext";
 import { tenantsApi } from "@/src/lib/tenantsApi";
 import { optimizationApi } from "@/src/lib/optimizationApi";
 import { propertiesApi } from "@/src/lib/propertiesApi";
-import { PreferencesModal } from "@/src/components/tenant/PreferencesModal";
-import { Header } from "@/src/components/layout/Header";
-import { LoadingSpinner } from "@/src/components/ui/loading-spinner";
-import { MessageCenter } from "@/src/components/communication/MessageCenter";
-import { ProfileManager } from "@/src/components/profile/ProfileManager";
+import { PreferencesModal } from "@/components/tenant/PreferencesModal";
+import { Header } from "@/components/layout/Header";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { MessageCenter } from "@/components/communication/MessageCenter";
+import { ProfileManager } from "@/components/profile/ProfileManager";
 import { convertBackendToFrontend } from "@/src/utils/typeConversion";
 import type { ITenant, PropertyMatch, IProperty } from "@/src/types";
 import {
@@ -62,6 +62,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function TenantDashboard() {
   const { user, isLoading: authLoading } = useAuth();
@@ -81,6 +82,7 @@ export default function TenantDashboard() {
   const [requestedDate, setRequestedDate] = useState("");
   const [requestedTime, setRequestedTime] = useState("");
   const [viewingMessage, setViewingMessage] = useState("");
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   // Fetch tenant profile and preferences
   useEffect(() => {
@@ -88,6 +90,7 @@ export default function TenantDashboard() {
 
     const fetchTenantData = async () => {
       setLoading(true);
+      setFetchError(null);
       try {
         // Use tenantId from user object if available, otherwise use user._id
         const tenantId = user.tenantId || user._id;
@@ -113,8 +116,12 @@ export default function TenantDashboard() {
           setShowPreferencesModal(true);
         }
       } catch (error) {
-        console.error("Error fetching tenant data:", error);
-        // If error occurs, show preferences modal to create tenant profile
+        setFetchError("Failed to load tenant data.");
+        toast({
+          title: "Error loading tenant data",
+          description: "Could not fetch tenant profile. Please try again.",
+          variant: "destructive",
+        });
         setShowPreferencesModal(true);
       } finally {
         setLoading(false);
@@ -122,7 +129,7 @@ export default function TenantDashboard() {
     };
 
     fetchTenantData();
-  }, [user, authLoading]);
+  }, [user, authLoading, toast]);
 
   // Fetch property matches from optimization API
   const fetchMatches = async (tenantData: ITenant) => {
@@ -444,441 +451,454 @@ export default function TenantDashboard() {
           </p>
         </div>
 
-        <Tabs
-          value={activeTab}
-          onValueChange={setActiveTab}
-          className="space-y-6"
-        >
-          <TabsList className="grid w-full grid-cols-5 lg:w-[600px]">
-            <TabsTrigger value="matches">My Matches</TabsTrigger>
-            <TabsTrigger value="preferences">Preferences</TabsTrigger>
-            <TabsTrigger value="saved">Saved Properties</TabsTrigger>
-            <TabsTrigger value="communications">Messages</TabsTrigger>
-            <TabsTrigger value="profile">Profile</TabsTrigger>
-          </TabsList>
+        {loading ? (
+          <div className="space-y-4">
+            <Skeleton className="h-32 w-full rounded-lg" />
+            <Skeleton className="h-32 w-full rounded-lg" />
+            <Skeleton className="h-32 w-full rounded-lg" />
+          </div>
+        ) : fetchError ? (
+          <div className="flex flex-col items-center justify-center py-8">
+            <span className="text-red-500 mb-2">{fetchError}</span>
+            <Button onClick={() => window.location.reload()}>Retry</Button>
+          </div>
+        ) : (
+          <Tabs
+            value={activeTab}
+            onValueChange={setActiveTab}
+            className="space-y-6"
+          >
+            <TabsList className="grid w-full grid-cols-5 lg:w-[600px]">
+              <TabsTrigger value="matches">My Matches</TabsTrigger>
+              <TabsTrigger value="preferences">Preferences</TabsTrigger>
+              <TabsTrigger value="saved">Saved Properties</TabsTrigger>
+              <TabsTrigger value="communications">Messages</TabsTrigger>
+              <TabsTrigger value="profile">Profile</TabsTrigger>
+            </TabsList>
 
-          <TabsContent value="matches" className="space-y-6">
-            {/* Quick Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">
-                        Total Matches
-                      </p>
-                      <p className="text-3xl font-bold text-blue-600">
-                        {matches.length}
-                      </p>
-                    </div>
-                    <Search className="h-8 w-8 text-blue-600" />
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">
-                        Best Match
-                      </p>
-                      <p className="text-3xl font-bold text-green-600">
-                        {matches.length > 0
-                          ? `${Math.round(
-                              Math.max(...matches.map((m) => m.matchScore))
-                            )}%`
-                          : "-"}
-                      </p>
-                    </div>
-                    <Star className="h-8 w-8 text-green-600" />
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">
-                        Avg. Compatibility
-                      </p>
-                      <p className="text-3xl font-bold text-purple-600">
-                        {matches.length > 0
-                          ? `${Math.round(
-                              matches.reduce(
-                                (sum, m) => sum + m.matchScore,
-                                0
-                              ) / matches.length
-                            )}%`
-                          : "-"}
-                      </p>
-                    </div>
-                    <Heart className="h-8 w-8 text-purple-600" />
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Property Matches */}
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xl font-semibold text-gray-900">
-                  Your Top Matches
-                </h3>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={fetchingMatches}
-                  onClick={() => tenant && fetchMatches(tenant)}
-                >
-                  {fetchingMatches ? (
-                    <LoadingSpinner size="sm" className="mr-2" />
-                  ) : (
-                    <Filter className="h-4 w-4 mr-2" />
-                  )}
-                  Refresh Results
-                </Button>
-              </div>
-
-              {matches.length === 0 && !fetchingMatches && (
+            <TabsContent value="matches" className="space-y-6">
+              {/* Quick Stats */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                 <Card>
-                  <CardContent className="p-8 text-center">
-                    <Search className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">
-                      No Matches Yet
-                    </h3>
-                    <p className="text-gray-600 mb-4">
-                      {tenant?.preferences
-                        ? "We couldn't find properties matching your current preferences. Try adjusting your criteria."
-                        : "Set up your preferences to get personalized property recommendations."}
-                    </p>
-                    <Button onClick={() => setShowPreferencesModal(true)}>
-                      <Settings className="h-4 w-4 mr-2" />
-                      {tenant?.preferences
-                        ? "Update Preferences"
-                        : "Set Preferences"}
-                    </Button>
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">
+                          Total Matches
+                        </p>
+                        <p className="text-3xl font-bold text-blue-600">
+                          {matches.length}
+                        </p>
+                      </div>
+                      <Search className="h-8 w-8 text-blue-600" />
+                    </div>
                   </CardContent>
                 </Card>
-              )}
+                <Card>
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">
+                          Best Match
+                        </p>
+                        <p className="text-3xl font-bold text-green-600">
+                          {matches.length > 0
+                            ? `${Math.round(
+                                Math.max(...matches.map((m) => m.matchScore))
+                              )}%`
+                            : "-"}
+                        </p>
+                      </div>
+                      <Star className="h-8 w-8 text-green-600" />
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">
+                          Avg. Compatibility
+                        </p>
+                        <p className="text-3xl font-bold text-purple-600">
+                          {matches.length > 0
+                            ? `${Math.round(
+                                matches.reduce(
+                                  (sum, m) => sum + m.matchScore,
+                                  0
+                                ) / matches.length
+                              )}%`
+                            : "-"}
+                        </p>
+                      </div>
+                      <Heart className="h-8 w-8 text-purple-600" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
 
-              {fetchingMatches && (
-                <div className="flex justify-center py-8">
-                  <LoadingSpinner size="lg" />
-                </div>
-              )}
-
-              {matches.map((match) => {
-                const property = properties.find(
-                  (p) => p._id === match.propertyId
-                );
-
-                return (
-                  <Card
-                    key={match.propertyId}
-                    className="overflow-hidden hover:shadow-lg transition-shadow"
+              {/* Property Matches */}
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xl font-semibold text-gray-900">
+                    Your Top Matches
+                  </h3>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={fetchingMatches}
+                    onClick={() => tenant && fetchMatches(tenant)}
                   >
-                    <div className="md:flex">
-                      <div className="md:w-1/3">
-                        <img
-                          src={property?.images?.[0] || "/placeholder.svg"}
-                          alt={property?.title || "Property"}
-                          className="w-full h-48 md:h-full object-cover"
-                        />
-                      </div>
-                      <div className="md:w-2/3 p-6">
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex-1">
-                            <h4 className="text-xl font-semibold text-gray-900 mb-2">
-                              {property?.title ||
-                                `Property ${match.propertyId}`}
-                            </h4>
-                            <div className="flex items-center text-gray-600 mb-2">
-                              <MapPin className="h-4 w-4 mr-1" />
-                              <span className="text-sm">
-                                {property?.location
-                                  ? `${property.location.address}, ${property.location.city}`
-                                  : "Location not available"}
-                              </span>
-                            </div>
-                            {property?.rent && (
-                              <p className="text-2xl font-bold text-blue-600">
-                                ₦{property.rent.toLocaleString()}/year
-                              </p>
-                            )}
-                          </div>
-                          <div className="text-right ml-4">
-                            <Badge variant="secondary" className="text-sm mb-2">
-                              {Math.round(match.matchScore)}% Match
-                            </Badge>
-                            <Progress
-                              value={match.matchScore}
-                              className="w-24"
-                            />
-                          </div>
-                        </div>
+                    {fetchingMatches ? (
+                      <LoadingSpinner size="sm" className="mr-2" />
+                    ) : (
+                      <Filter className="h-4 w-4 mr-2" />
+                    )}
+                    Refresh Results
+                  </Button>
+                </div>
 
-                        {property && (
-                          <div className="flex items-center space-x-4 mb-4 text-sm text-gray-600">
-                            <div className="flex items-center">
-                              <Bed className="h-4 w-4 mr-1" />
-                              <span>{property.bedrooms} bed</span>
-                            </div>
-                            <div className="flex items-center">
-                              <Bath className="h-4 w-4 mr-1" />
-                              <span>{property.bathrooms} bath</span>
-                            </div>
-                            {property.size && (
-                              <div className="flex items-center">
-                                <span>{property.size} sqm</span>
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        <div className="mb-4">
-                          <h5 className="text-sm font-medium text-gray-700 mb-2">
-                            Why this matches:
-                          </h5>
-                          <ul className="text-sm text-green-700 space-y-1">
-                            {match.explanation.map((reason, idx) => (
-                              <li key={idx} className="flex items-start">
-                                <span className="text-green-500 mr-2">•</span>
-                                {reason}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-
-                        <div className="flex space-x-2">
-                          <Button variant="outline" size="sm">
-                            <Eye className="h-4 w-4 mr-2" />
-                            View Details
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleSaveProperty(match.propertyId)}
-                          >
-                            <Heart className="h-4 w-4 mr-2" />
-                            Save
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                              property && openViewingModal(property)
-                            }
-                          >
-                            <Calendar className="h-4 w-4 mr-2" />
-                            Request Viewing
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
+                {matches.length === 0 && !fetchingMatches && (
+                  <Card>
+                    <CardContent className="p-8 text-center">
+                      <Search className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">
+                        No Matches Yet
+                      </h3>
+                      <p className="text-gray-600 mb-4">
+                        {tenant?.preferences
+                          ? "We couldn't find properties matching your current preferences. Try adjusting your criteria."
+                          : "Set up your preferences to get personalized property recommendations."}
+                      </p>
+                      <Button onClick={() => setShowPreferencesModal(true)}>
+                        <Settings className="h-4 w-4 mr-2" />
+                        {tenant?.preferences
+                          ? "Update Preferences"
+                          : "Set Preferences"}
+                      </Button>
+                    </CardContent>
                   </Card>
-                );
-              })}
-            </div>
-          </TabsContent>
+                )}
 
-          <TabsContent value="preferences" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Settings className="h-5 w-5 mr-2" />
-                  Your Preferences
-                </CardTitle>
-                <CardDescription>
-                  Adjust your preferences to get better property matches
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {tenant?.preferences ? (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <Label className="text-sm font-medium">
-                          Budget Range
-                        </Label>
-                        <p className="text-sm text-gray-600">
-                          ₦{tenant.preferences.budget?.min?.toLocaleString()} -
-                          ₦{tenant.preferences.budget?.max?.toLocaleString()}
-                        </p>
-                      </div>
-                      <div>
-                        <Label className="text-sm font-medium">
-                          Preferred Location
-                        </Label>
-                        <p className="text-sm text-gray-600">
-                          {tenant.preferences.preferredLocation}
-                        </p>
-                      </div>
-                      <div>
-                        <Label className="text-sm font-medium">Bedrooms</Label>
-                        <p className="text-sm text-gray-600">
-                          {tenant.preferences.preferredBedrooms}
-                        </p>
-                      </div>
-                      <div>
-                        <Label className="text-sm font-medium">Bathrooms</Label>
-                        <p className="text-sm text-gray-600">
-                          {tenant.preferences.preferredBathrooms}
-                        </p>
-                      </div>
-                    </div>
-                    <div>
-                      <Label className="text-sm font-medium">
-                        Required Amenities
-                      </Label>
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {tenant.preferences.requiredAmenities?.map(
-                          (amenity, index) => (
-                            <Badge key={index} variant="outline">
-                              {amenity}
-                            </Badge>
-                          )
-                        )}
-                      </div>
-                    </div>
-                    {/* Preferred Features */}
-                    {tenant?.preferences?.features && (
-                      <div>
-                        <div className="font-medium mt-4">
-                          Preferred Features
-                        </div>
-                        <div className="flex flex-wrap gap-2 mt-1">
-                          {Object.entries(tenant.preferences.features)
-                            .filter(([_, v]) => v)
-                            .map(([feature]) => (
-                              <span
-                                key={feature}
-                                className="px-2 py-1 bg-gray-100 rounded text-sm"
-                              >
-                                {feature}
-                              </span>
-                            ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Preferred Utilities */}
-                    {tenant?.preferences?.utilities && (
-                      <div>
-                        <div className="font-medium mt-4">
-                          Preferred Utilities
-                        </div>
-                        <div className="flex flex-wrap gap-2 mt-1">
-                          {Object.entries(tenant.preferences.utilities)
-                            .filter(([_, v]) => v)
-                            .map(([utility]) => (
-                              <span
-                                key={utility}
-                                className="px-2 py-1 bg-gray-100 rounded text-sm"
-                              >
-                                {utility}
-                              </span>
-                            ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <Settings className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">
-                      No Preferences Set
-                    </h3>
-                    <p className="text-gray-600 mb-4">
-                      Set your preferences to get personalized property
-                      recommendations.
-                    </p>
+                {fetchingMatches && (
+                  <div className="flex justify-center py-8">
+                    <LoadingSpinner size="lg" />
                   </div>
                 )}
 
-                <Button
-                  className="w-full"
-                  onClick={() => setShowPreferencesModal(true)}
-                  disabled={updatingPreferences}
-                >
-                  {updatingPreferences ? (
-                    <LoadingSpinner size="sm" className="mr-2" />
-                  ) : (
-                    <Settings className="h-4 w-4 mr-2" />
-                  )}
-                  {tenant?.preferences ? "Edit Preferences" : "Set Preferences"}
-                </Button>
-              </CardContent>
-            </Card>
-          </TabsContent>
+                {matches.map((match) => {
+                  const property = properties.find(
+                    (p) => p._id === match.propertyId
+                  );
 
-          <TabsContent value="saved" className="space-y-6">
-            {tenant?.savedProperties && tenant.savedProperties.length > 0 ? (
-              <div className="space-y-6">
-                {tenant.savedProperties.map((propertyId) => {
-                  const property = properties.find((p) => p._id === propertyId);
-                  return property ? (
-                    <Card key={propertyId} className="overflow-hidden">
+                  return (
+                    <Card
+                      key={match.propertyId}
+                      className="overflow-hidden hover:shadow-lg transition-shadow"
+                    >
                       <div className="md:flex">
                         <div className="md:w-1/3">
                           <img
-                            src={property.images?.[0] || "/placeholder.svg"}
-                            alt={property.title}
+                            src={property?.images?.[0] || "/placeholder.svg"}
+                            alt={property?.title || "Property"}
                             className="w-full h-48 md:h-full object-cover"
                           />
                         </div>
                         <div className="md:w-2/3 p-6">
-                          <h4 className="text-xl font-semibold text-gray-900 mb-2">
-                            {property.title}
-                          </h4>
-                          <div className="flex items-center text-gray-600 mb-2">
-                            <MapPin className="h-4 w-4 mr-1" />
-                            <span className="text-sm">
-                              {property.location.address},{" "}
-                              {property.location.city}
-                            </span>
+                          <div className="flex items-start justify-between mb-4">
+                            <div className="flex-1">
+                              <h4 className="text-xl font-semibold text-gray-900 mb-2">
+                                {property?.title ||
+                                  `Property ${match.propertyId}`}
+                              </h4>
+                              <div className="flex items-center text-gray-600 mb-2">
+                                <MapPin className="h-4 w-4 mr-1" />
+                                <span className="text-sm">
+                                  {property?.location
+                                    ? `${property.location.address}, ${property.location.city}`
+                                    : "Location not available"}
+                                </span>
+                              </div>
+                              {property?.rent && (
+                                <p className="text-2xl font-bold text-blue-600">
+                                  ₦{property.rent.toLocaleString()}/year
+                                </p>
+                              )}
+                            </div>
+                            <div className="text-right ml-4">
+                              <Badge variant="secondary" className="text-sm mb-2">
+                                {Math.round(match.matchScore)}% Match
+                              </Badge>
+                              <Progress
+                                value={match.matchScore}
+                                className="w-24"
+                              />
+                            </div>
                           </div>
-                          <p className="text-2xl font-bold text-blue-600 mb-4">
-                            ₦{property.rent.toLocaleString()}/year
-                          </p>
+
+                          {property && (
+                            <div className="flex items-center space-x-4 mb-4 text-sm text-gray-600">
+                              <div className="flex items-center">
+                                <Bed className="h-4 w-4 mr-1" />
+                                <span>{property.bedrooms} bed</span>
+                              </div>
+                              <div className="flex items-center">
+                                <Bath className="h-4 w-4 mr-1" />
+                                <span>{property.bathrooms} bath</span>
+                              </div>
+                              {property.size && (
+                                <div className="flex items-center">
+                                  <span>{property.size} sqm</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          <div className="mb-4">
+                            <h5 className="text-sm font-medium text-gray-700 mb-2">
+                              Why this matches:
+                            </h5>
+                            <ul className="text-sm text-green-700 space-y-1">
+                              {match.explanation.map((reason, idx) => (
+                                <li key={idx} className="flex items-start">
+                                  <span className="text-green-500 mr-2">•</span>
+                                  {reason}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+
                           <div className="flex space-x-2">
                             <Button variant="outline" size="sm">
                               <Eye className="h-4 w-4 mr-2" />
                               View Details
                             </Button>
-                            <Button variant="outline" size="sm">
-                              <MessageSquare className="h-4 w-4 mr-2" />
-                              Contact
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleSaveProperty(match.propertyId)}
+                            >
+                              <Heart className="h-4 w-4 mr-2" />
+                              Save
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                property && openViewingModal(property)
+                              }
+                            >
+                              <Calendar className="h-4 w-4 mr-2" />
+                              Request Viewing
                             </Button>
                           </div>
                         </div>
                       </div>
                     </Card>
-                  ) : null;
+                  );
                 })}
               </div>
-            ) : (
+            </TabsContent>
+
+            <TabsContent value="preferences" className="space-y-6">
               <Card>
-                <CardContent className="p-6 text-center">
-                  <Heart className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">
-                    No Saved Properties Yet
-                  </h3>
-                  <p className="text-gray-600">
-                    Properties you save will appear here for easy access later.
-                  </p>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <Settings className="h-5 w-5 mr-2" />
+                    Your Preferences
+                  </CardTitle>
+                  <CardDescription>
+                    Adjust your preferences to get better property matches
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {tenant?.preferences ? (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-sm font-medium">
+                            Budget Range
+                          </Label>
+                          <p className="text-sm text-gray-600">
+                            ₦{tenant.preferences.budget?.min?.toLocaleString()} -
+                            ₦{tenant.preferences.budget?.max?.toLocaleString()}
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium">
+                            Preferred Location
+                          </Label>
+                          <p className="text-sm text-gray-600">
+                            {tenant.preferences.preferredLocation}
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium">Bedrooms</Label>
+                          <p className="text-sm text-gray-600">
+                            {tenant.preferences.preferredBedrooms}
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium">Bathrooms</Label>
+                          <p className="text-sm text-gray-600">
+                            {tenant.preferences.preferredBathrooms}
+                          </p>
+                        </div>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium">
+                          Required Amenities
+                        </Label>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {tenant.preferences.requiredAmenities?.map(
+                            (amenity, index) => (
+                              <Badge key={index} variant="outline">
+                                {amenity}
+                              </Badge>
+                            )
+                          )}
+                        </div>
+                      </div>
+                      {/* Preferred Features */}
+                      {tenant?.preferences?.features && (
+                        <div>
+                          <div className="font-medium mt-4">
+                            Preferred Features
+                          </div>
+                          <div className="flex flex-wrap gap-2 mt-1">
+                            {Object.entries(tenant.preferences.features)
+                              .filter(([_, v]) => v)
+                              .map(([feature]) => (
+                                <span
+                                  key={feature}
+                                  className="px-2 py-1 bg-gray-100 rounded text-sm"
+                                >
+                                  {feature}
+                                </span>
+                              ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Preferred Utilities */}
+                      {tenant?.preferences?.utilities && (
+                        <div>
+                          <div className="font-medium mt-4">
+                            Preferred Utilities
+                          </div>
+                          <div className="flex flex-wrap gap-2 mt-1">
+                            {Object.entries(tenant.preferences.utilities)
+                              .filter(([_, v]) => v)
+                              .map(([utility]) => (
+                                <span
+                                  key={utility}
+                                  className="px-2 py-1 bg-gray-100 rounded text-sm"
+                                >
+                                  {utility}
+                                </span>
+                              ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <Settings className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">
+                        No Preferences Set
+                      </h3>
+                      <p className="text-gray-600 mb-4">
+                        Set your preferences to get personalized property
+                        recommendations.
+                      </p>
+                    </div>
+                  )}
+
+                  <Button
+                    className="w-full"
+                    onClick={() => setShowPreferencesModal(true)}
+                    disabled={updatingPreferences}
+                  >
+                    {updatingPreferences ? (
+                      <LoadingSpinner size="sm" className="mr-2" />
+                    ) : (
+                      <Settings className="h-4 w-4 mr-2" />
+                    )}
+                    {tenant?.preferences ? "Edit Preferences" : "Set Preferences"}
+                  </Button>
                 </CardContent>
               </Card>
-            )}
-          </TabsContent>
+            </TabsContent>
 
-          <TabsContent value="communications" className="space-y-6">
-            {user && <MessageCenter userId={user._id} userType="tenant" />}
-          </TabsContent>
+            <TabsContent value="saved" className="space-y-6">
+              {tenant?.savedProperties && tenant.savedProperties.length > 0 ? (
+                <div className="space-y-6">
+                  {tenant.savedProperties.map((propertyId) => {
+                    const property = properties.find((p) => p._id === propertyId);
+                    return property ? (
+                      <Card key={propertyId} className="overflow-hidden">
+                        <div className="md:flex">
+                          <div className="md:w-1/3">
+                            <img
+                              src={property.images?.[0] || "/placeholder.svg"}
+                              alt={property.title}
+                              className="w-full h-48 md:h-full object-cover"
+                            />
+                          </div>
+                          <div className="md:w-2/3 p-6">
+                            <h4 className="text-xl font-semibold text-gray-900 mb-2">
+                              {property.title}
+                            </h4>
+                            <div className="flex items-center text-gray-600 mb-2">
+                              <MapPin className="h-4 w-4 mr-1" />
+                              <span className="text-sm">
+                                {property.location.address},{" "}
+                                {property.location.city}
+                              </span>
+                            </div>
+                            <p className="text-2xl font-bold text-blue-600 mb-4">
+                              ₦{property.rent.toLocaleString()}/year
+                            </p>
+                            <div className="flex space-x-2">
+                              <Button variant="outline" size="sm">
+                                <Eye className="h-4 w-4 mr-2" />
+                                View Details
+                              </Button>
+                              <Button variant="outline" size="sm">
+                                <MessageSquare className="h-4 w-4 mr-2" />
+                                Contact
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+                    ) : null;
+                  })}
+                </div>
+              ) : (
+                <Card>
+                  <CardContent className="p-6 text-center">
+                    <Heart className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">
+                      No Saved Properties Yet
+                    </h3>
+                    <p className="text-gray-600">
+                      Properties you save will appear here for easy access later.
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
 
-          <TabsContent value="profile" className="space-y-6">
-            <ProfileManager />
-          </TabsContent>
-        </Tabs>
+            <TabsContent value="communications" className="space-y-6">
+              {user && <MessageCenter userId={user._id} userType="tenant" />}
+            </TabsContent>
+
+            <TabsContent value="profile" className="space-y-6">
+              <ProfileManager />
+            </TabsContent>
+          </Tabs>
+        )}
       </div>
 
       <Dialog open={showViewingModal} onOpenChange={setShowViewingModal}>

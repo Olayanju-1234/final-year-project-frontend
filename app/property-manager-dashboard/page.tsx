@@ -13,10 +13,10 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
-import { LoadingSpinner } from "@/src/components/ui/loading-spinner"
-import { MessageCenter } from "@/src/components/communication/MessageCenter"
-import { ProfileManager } from "@/src/components/profile/ProfileManager"
-import { Header } from "@/src/components/layout/Header"
+import { LoadingSpinner } from "@/components/ui/loading-spinner"
+import { MessageCenter } from "@/components/communication/MessageCenter"
+import { ProfileManager } from "@/components/profile/ProfileManager"
+import { Header } from "@/components/layout/Header"
 import { propertiesApi } from "@/src/lib/propertiesApi"
 import { useAuth } from "@/src/context/AuthContext"
 import { convertBackendToFrontend } from "@/src/utils/typeConversion"
@@ -48,6 +48,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { optimizationApi } from "@/src/lib/optimizationApi"
 import { communicationApi } from "@/src/lib/communicationApi"
+import { Skeleton } from "@/components/ui/skeleton"
 
 function getUserId(user: { _id?: string; id?: string }): string | undefined {
   return user?._id || (user as any)?.id;
@@ -77,6 +78,7 @@ export default function PropertyManagerDashboard() {
   const [activeTab, setActiveTab] = useState('properties')
   const [tenantMatches, setTenantMatches] = useState<any[]>([])
   const [loadingMatches, setLoadingMatches] = useState(false)
+  const [fetchError, setFetchError] = useState<string | null>(null)
 
   // State for landlord viewing requests
   const [viewingRequests, setViewingRequests] = useState<IViewing[]>([])
@@ -238,6 +240,7 @@ export default function PropertyManagerDashboard() {
     }
     try {
       setLoading(true)
+      setFetchError(null)
       console.log('[fetchProperties] Fetching properties for landlord:', landlordId)
       const response = await propertiesApi.getByLandlord(landlordId.toString())
       console.log('[fetchProperties] API response:', response)
@@ -250,12 +253,24 @@ export default function PropertyManagerDashboard() {
         setProperties(convertedProperties)
         console.log('[fetchProperties] Properties set:', convertedProperties.length)
       } else {
-        setError(response.message || "Failed to fetch properties")
+        setProperties([])
+        setFetchError(response.message || "Failed to fetch properties")
         console.log('[fetchProperties] API failed:', response.message)
+        toast({
+          title: "Error loading properties",
+          description: response.message || "Could not fetch properties. Please try again.",
+          variant: "destructive",
+        })
       }
     } catch (err) {
       console.error('[fetchProperties] Error:', err)
-      setError("Failed to fetch properties: " + (err instanceof Error ? err.message : 'Unknown error'))
+      setProperties([])
+      setFetchError("Failed to fetch properties.")
+      toast({
+        title: "Error loading properties",
+        description: "Could not fetch properties. Please try again.",
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
       console.log('[fetchProperties] completed, loading set to false')

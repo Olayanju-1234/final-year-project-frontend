@@ -13,6 +13,7 @@ import { Home, Mail, Lock, User, Phone, MapPin, Eye, EyeOff, ArrowLeft, Terminal
 import { useAuth } from "@/src/context/AuthContext"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { useToast } from "@/hooks/use-toast"
+import { Skeleton } from "@/components/ui/skeleton"
 
 export default function AuthPages() {
   const searchParams = useSearchParams();
@@ -187,16 +188,18 @@ export default function AuthPages() {
                   </div>
                 </>
               )}
-              {error && (
-                <Alert variant="destructive">
-                  <Terminal className="h-4 w-4" />
-                  <AlertTitle>Authentication Failed</AlertTitle>
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
+              {isLoading ? (
+                <Skeleton className="h-64 w-full rounded-lg" />
+              ) : error ? (
+                <div className="flex flex-col items-center justify-center py-8">
+                  <span className="text-red-500 mb-2">{error}</span>
+                  <Button onClick={() => window.location.reload()}>Retry</Button>
+                </div>
+              ) : (
+                <Button type="submit" className="w-full" disabled={isLoading}>
+                  {isLoading ? "Processing..." : authMode === "login" ? "Login" : "Create an account"}
+                </Button>
               )}
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? "Processing..." : authMode === "login" ? "Login" : "Create an account"}
-              </Button>
             </div>
           </form>
           <div className="mt-4 text-center text-sm">
