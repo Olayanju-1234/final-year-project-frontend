@@ -218,11 +218,17 @@ export function PreferencesModal({
           variant: "destructive",
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error saving preferences:", error);
+      let errorMessage = "Failed to save preferences. Please try again.";
+      if (error?.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
       toast({
         title: "Error",
-        description: "Failed to save preferences. Please try again.",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {

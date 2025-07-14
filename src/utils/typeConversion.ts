@@ -49,10 +49,17 @@ export const convertBackendToFrontend = {
       ...backendMessage,
       _id: backendMessage._id?.toString() || backendMessage._id,
       fromUserId:
-        backendMessage.fromUserId?.toString() || backendMessage.fromUserId,
-      toUserId: backendMessage.toUserId?.toString() || backendMessage.toUserId,
+        typeof backendMessage.fromUserId === 'object'
+          ? backendMessage.fromUserId
+          : backendMessage.fromUserId?.toString() || backendMessage.fromUserId,
+      toUserId:
+        typeof backendMessage.toUserId === 'object'
+          ? backendMessage.toUserId
+          : backendMessage.toUserId?.toString() || backendMessage.toUserId,
       propertyId:
-        backendMessage.propertyId?.toString() || backendMessage.propertyId,
+        typeof backendMessage.propertyId === 'object'
+          ? backendMessage.propertyId
+          : backendMessage.propertyId?.toString() || backendMessage.propertyId,
     };
   },
 
@@ -62,11 +69,18 @@ export const convertBackendToFrontend = {
     return {
       ...backendViewing,
       _id: backendViewing._id?.toString() || backendViewing._id,
-      tenantId: backendViewing.tenantId?.toString() || backendViewing.tenantId,
+      tenantId:
+        typeof backendViewing.tenantId === 'object'
+          ? backendViewing.tenantId
+          : backendViewing.tenantId?.toString() || backendViewing.tenantId,
       landlordId:
-        backendViewing.landlordId?.toString() || backendViewing.landlordId,
+        typeof backendViewing.landlordId === 'object'
+          ? backendViewing.landlordId
+          : backendViewing.landlordId?.toString() || backendViewing.landlordId,
       propertyId:
-        backendViewing.propertyId?.toString() || backendViewing.propertyId,
+        typeof backendViewing.propertyId === 'object'
+          ? backendViewing.propertyId
+          : backendViewing.propertyId?.toString() || backendViewing.propertyId,
     };
   },
 

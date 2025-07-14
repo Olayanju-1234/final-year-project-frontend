@@ -215,18 +215,53 @@ export const MessageCenter: React.FC<MessageCenterProps> = ({
     });
   };
 
-  const getUserDisplayName = (user: IUser | string | null | undefined) => {
-    if (!user || typeof user === 'string') {
+  const getUserDisplayName = (user: any) => {
+    if (!user) return 'Unknown User';
+    if (typeof user === 'string') {
+      return user.length > 6 ? `User (${user.slice(0, 6)}...)` : 'Unknown User';
+    }
+    if (typeof user === 'object') {
+      if (user.name) return user.name;
+      if (user.email) return user.email;
+      if (user._id) return `User (${String(user._id).slice(0, 6)}...)`;
+      if (user._doc) {
+        if (user._doc.name) return user._doc.name;
+        if (user._doc.email) return user._doc.email;
+        if (user._doc._id) return `User (${String(user._doc._id).slice(0, 6)}...)`;
+      }
       return 'Unknown User';
     }
-    return user.name || user.email || 'Unknown User';
+    return 'Unknown User';
   };
 
-  const getPropertyDisplayName = (property: IProperty | string) => {
+  const getUserEmail = (user: any) => {
+    if (!user) return '';
+    if (typeof user === 'object') {
+      if (user.email) return user.email;
+      if (user._doc && user._doc.email) return user._doc.email;
+    }
+    return '';
+  };
+
+  const getPropertyDisplayName = (property: any) => {
+    if (!property) return 'Unknown Property';
     if (typeof property === 'string') {
+      return property.length > 6 ? `Property (${property.slice(0, 6)}...)` : 'Unknown Property';
+    }
+    if (typeof property === 'object') {
+      if (property.title) return property.title;
+      if (property._id) return `Property (${String(property._id).slice(0, 6)}...)`;
       return 'Unknown Property';
     }
-    return property.title || 'Unknown Property';
+    return 'Unknown Property';
+  };
+
+  const getPropertyLocation = (property: any) => {
+    if (!property || typeof property !== 'object') return '';
+    if (property.location) {
+      return `${property.location.address || ''}${property.location.city ? ', ' + property.location.city : ''}`;
+    }
+    return '';
   };
 
   return (
@@ -527,10 +562,16 @@ export const MessageCenter: React.FC<MessageCenterProps> = ({
                               </Badge>
                             </div>
                             <h4 className="font-semibold">
-                              Property: {getPropertyDisplayName(viewing.propertyId)}
+                              Property: <span className="font-semibold">{getPropertyDisplayName(viewing.propertyId)}</span>
+                              {getPropertyLocation(viewing.propertyId) && (
+                                <span className="block text-xs text-gray-500">{getPropertyLocation(viewing.propertyId)}</span>
+                              )}
                             </h4>
                             <p className="text-sm text-muted-foreground mt-1">
-                              Tenant: {getUserDisplayName(viewing.tenantId)}
+                              Tenant: <span className="font-semibold">{getUserDisplayName(viewing.tenantId)}</span>
+                              {getUserEmail(viewing.tenantId) && (
+                                <span className="block text-xs text-gray-500">{getUserEmail(viewing.tenantId)}</span>
+                              )}
                             </p>
                             <p className="text-sm text-muted-foreground">
                               Date: {formatDate(viewing.requestedDate)}
@@ -579,23 +620,27 @@ export const MessageCenter: React.FC<MessageCenterProps> = ({
       {/* Message Detail Dialog */}
       {selectedMessage && (
         <Dialog open={!!selectedMessage} onOpenChange={() => setSelectedMessage(null)}>
-          <DialogContent>
+          <DialogContent className="max-w-lg w-full p-6 rounded-2xl shadow-xl bg-white max-h-[60vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>{selectedMessage.subject}</DialogTitle>
-              <DialogDescription>
-                {formatDate(selectedMessage.createdAt)}
-              </DialogDescription>
+              <DialogTitle className="text-2xl font-bold mb-1">{selectedMessage.subject}</DialogTitle>
+              <DialogDescription className="text-xs text-gray-500 mb-4">{formatDate(selectedMessage.createdAt)}</DialogDescription>
             </DialogHeader>
-            <div className="space-y-4">
+            <div className="space-y-6">
               <div>
-                <Label>From</Label>
-                <p className="text-sm">
-                  {getUserDisplayName(selectedMessage.fromUserId)}
-                </p>
+                <Label className="text-xs text-gray-500">From</Label>
+                <div className="flex items-center gap-2 text-base font-semibold text-gray-800 mt-1">
+                  <MessageSquare className="w-4 h-4 text-blue-500" />
+                  <span>{getUserDisplayName(selectedMessage.fromUserId)}</span>
+                </div>
+                {getUserEmail(selectedMessage.fromUserId) && (
+                  <span className="block text-xs text-gray-500 ml-6">{getUserEmail(selectedMessage.fromUserId)}</span>
+                )}
               </div>
               <div>
-                <Label>Message</Label>
-                <p className="text-sm whitespace-pre-wrap">{selectedMessage.message}</p>
+                <Label className="text-xs text-gray-500">Message</Label>
+                <div className="text-base whitespace-pre-wrap break-words break-all max-w-full bg-gray-50 rounded-md p-4 mt-1 overflow-x-auto" style={{wordBreak: 'break-word'}}>
+                  {selectedMessage.message}
+                </div>
               </div>
             </div>
           </DialogContent>

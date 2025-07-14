@@ -85,6 +85,11 @@ export default function PropertyManagerDashboard() {
   const [loadingViewings, setLoadingViewings] = useState(false)
   const [viewingsError, setViewingsError] = useState(null)
 
+  // Market analytics state
+  const [marketStats, setMarketStats] = useState<any>(null);
+  const [marketStatsLoading, setMarketStatsLoading] = useState(true);
+  const [marketStatsError, setMarketStatsError] = useState<string | null>(null);
+
   // Get initial tab from URL params
   useEffect(() => {
     const tabParam = searchParams?.get('tab')
@@ -114,6 +119,39 @@ export default function PropertyManagerDashboard() {
         .finally(() => setLoadingMatches(false))
     }
   }, [user ? user._id : null, user ? user.userType : null])
+
+  // Fetch viewing requests for landlord
+  useEffect(() => {
+    if (!user || user.userType !== "landlord") return;
+    setLoadingViewings(true);
+    communicationApi.getViewings(undefined, undefined, undefined, "landlord")
+      .then((response) => {
+        if (response.success) {
+          setViewingRequests((response.data ?? []).map((v: any) => convertBackendToFrontend.viewing(v)));
+        } else {
+          setViewingRequests([]);
+        }
+      })
+      .catch(() => setViewingRequests([]))
+      .finally(() => setLoadingViewings(false));
+  }, [user]);
+
+  useEffect(() => {
+    setMarketStatsLoading(true);
+    setMarketStatsError(null);
+    propertiesApi.getStats()
+      .then((res) => {
+        if (res.success) {
+          setMarketStats(res.data);
+        } else {
+          setMarketStatsError(res.message || 'Failed to load market analytics');
+        }
+      })
+      .catch((err) => {
+        setMarketStatsError(err?.message || 'Failed to load market analytics');
+      })
+      .finally(() => setMarketStatsLoading(false));
+  }, []);
 
   // Form state for adding/editing property
   const [formData, setFormData] = useState({
@@ -343,11 +381,18 @@ export default function PropertyManagerDashboard() {
           variant: "destructive",
         })
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Property creation error:", err) // Debug log
+      // Show backend error if available
+      let errorMessage = "Failed to create property"
+      if (err?.response?.data?.message) {
+        errorMessage = err.response.data.message
+      } else if (err?.message) {
+        errorMessage = err.message
+      }
       toast({
         title: "Error",
-        description: "Failed to create property",
+        description: errorMessage,
         variant: "destructive",
       })
     } finally {
@@ -430,11 +475,17 @@ export default function PropertyManagerDashboard() {
           variant: "destructive",
         })
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Update property error:", err)
+      let errorMessage = "Failed to update property"
+      if (err?.response?.data?.message) {
+        errorMessage = err.response.data.message
+      } else if (err?.message) {
+        errorMessage = err.message
+      }
       toast({
         title: "Error",
-        description: "Failed to update property",
+        description: errorMessage,
         variant: "destructive",
       })
     } finally {
@@ -576,6 +627,17 @@ export default function PropertyManagerDashboard() {
   const vacantProperties = properties.filter(p => p.status === "available").length
   const pendingProperties = properties.filter(p => p.status === "pending").length
 
+  // Map propertyId to best match score among tenants
+  const propertyMatchScores: Record<string, number> = {};
+  tenantMatches.forEach((matchGroup: any) => {
+    const propertyId = matchGroup.property._id?.toString();
+    if (propertyId && Array.isArray(matchGroup.matches) && matchGroup.matches.length > 0) {
+      // Use the highest match score for this property
+      const bestScore = Math.max(...matchGroup.matches.map((m: any) => m.matchScore));
+      propertyMatchScores[propertyId] = bestScore;
+    }
+  });
+
   const resetForm = () => {
     setFormData({
       title: "",
@@ -607,6 +669,70 @@ export default function PropertyManagerDashboard() {
     setImagePreviewUrls([])
     setEditingProperty(null)
   }
+
+  // Add this function inside the PropertyManagerDashboard component
+  const handleMarkAsOccupied = async (propertyId: string) => {
+    const property = properties.find(p => p._id.toString() === propertyId);
+    if (!property) {
+      toast({
+        title: 'Error',
+        description: 'Property not found.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    try {
+      const formDataToSend = new FormData();
+      formDataToSend.append('title', property.title);
+      formDataToSend.append('description', property.description);
+      formDataToSend.append('rent', property.rent.toString());
+      formDataToSend.append('bedrooms', property.bedrooms.toString());
+      formDataToSend.append('bathrooms', property.bathrooms.toString());
+      formDataToSend.append('size', property.size?.toString() || '');
+      formDataToSend.append('location[address]', property.location.address);
+      formDataToSend.append('location[city]', property.location.city);
+      formDataToSend.append('location[state]', property.location.state);
+      property.amenities.forEach(amenity => {
+        formDataToSend.append('amenities', amenity);
+      });
+      formDataToSend.append('features[furnished]', property.features.furnished.toString());
+      formDataToSend.append('features[petFriendly]', property.features.petFriendly.toString());
+      formDataToSend.append('features[parking]', property.features.parking.toString());
+      formDataToSend.append('features[balcony]', property.features.balcony.toString());
+      formDataToSend.append('utilities[electricity]', property.utilities.electricity.toString());
+      formDataToSend.append('utilities[water]', property.utilities.water.toString());
+      formDataToSend.append('utilities[internet]', property.utilities.internet.toString());
+      formDataToSend.append('utilities[gas]', property.utilities.gas.toString());
+      // Preserve all existing images
+      (property.images || []).forEach(url => {
+        formDataToSend.append('imagesToKeep', url);
+      });
+      // Set status to 'occupied'
+      formDataToSend.append('status', 'occupied');
+
+      const response = await propertiesApi.update(propertyId, formDataToSend);
+      if (response.success) {
+        toast({
+          title: 'Property Marked as Occupied',
+          description: 'The property status has been updated.',
+          variant: 'default',
+        });
+        fetchProperties();
+      } else {
+        toast({
+          title: 'Error',
+          description: response.message || 'Failed to update property status',
+          variant: 'destructive',
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: 'Error',
+        description: err?.response?.data?.message || err.message || 'Failed to update property status',
+        variant: 'destructive',
+      });
+    }
+  };
 
   console.log('[Dashboard] Render', { user, loading, error, isLoading: isLoading })
 
@@ -1397,18 +1523,7 @@ export default function PropertyManagerDashboard() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Occupied</p>
-                  <p className="text-3xl font-bold text-green-600">{occupiedProperties}</p>
-                </div>
-                <Users className="h-8 w-8 text-green-600" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Vacant</p>
+                  <p className="text-sm font-medium text-gray-600">Available</p>
                   <p className="text-3xl font-bold text-orange-600">{vacantProperties}</p>
                 </div>
                 <Calendar className="h-8 w-8 text-orange-600" />
@@ -1426,10 +1541,22 @@ export default function PropertyManagerDashboard() {
               </div>
             </CardContent>
           </Card>
+          {/* Total Inquiries Card */}
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Total Inquiries</p>
+                  <p className="text-3xl font-bold text-purple-600">{properties.reduce((sum, p) => sum + (p.inquiries || 0), 0)}</p>
+                </div>
+                <Users className="h-8 w-8 text-purple-600" />
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5 lg:w-[600px]">
+          <TabsList className="grid w-full grid-cols-6 lg:w-[700px]">
             <TabsTrigger value="properties">My Properties</TabsTrigger>
             <TabsTrigger value="matches">Tenant Matches</TabsTrigger>
             <TabsTrigger value="communications">Communications</TabsTrigger>
@@ -1540,14 +1667,14 @@ export default function PropertyManagerDashboard() {
                         <div className="flex items-center justify-between">
                           <div className="flex items-center space-x-2">
                             <span className="text-sm text-gray-600">Match Score:</span>
-                            <Progress value={85} className="w-20" />
-                            <span className="text-sm font-medium">85%</span>
+                            <Progress value={propertyMatchScores[property._id.toString()] ?? 0} className="w-20" />
+                            <span className="text-sm font-medium">
+                              {propertyMatchScores[property._id.toString()] !== undefined
+                                ? `${propertyMatchScores[property._id.toString()]}%`
+                                : "N/A"}
+                            </span>
                           </div>
                           <div className="flex space-x-2">
-                            <Button variant="outline" size="sm">
-                              <Eye className="h-4 w-4 mr-2" />
-                              View
-                            </Button>
                             <Button 
                               variant="outline" 
                               size="sm"
@@ -1564,6 +1691,16 @@ export default function PropertyManagerDashboard() {
                               <Trash2 className="h-4 w-4 mr-2" />
                               Delete
                             </Button>
+                            {property.status === 'available' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleMarkAsOccupied(property._id.toString())}
+                              >
+                                <CheckCircle className="h-4 w-4 mr-2" />
+                                Mark as Occupied
+                              </Button>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1618,70 +1755,130 @@ export default function PropertyManagerDashboard() {
           </TabsContent>
 
           <TabsContent value="analytics" className="space-y-6">
-            <div className="grid md:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <BarChart3 className="h-5 w-5 mr-2" />
-                    Property Performance
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {properties.length === 0 ? (
-                    <p className="text-gray-500 text-center py-4">No properties to analyze</p>
-                  ) : (
-                    <div className="space-y-4">
-                      {properties.map((property) => (
-                        <div key={property._id.toString()} className="flex items-center justify-between">
-                          <div>
-                            <p className="font-medium">{property.title}</p>
-                            <p className="text-sm text-gray-600">
-                              {property.views} views • {property.inquiries} inquiries
-                            </p>
-                          </div>
-                          <Progress value={85} className="w-20" />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <TrendingUp className="h-5 w-5 mr-2" />
-                    Market Insights
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Average Rent (Your Area)</span>
-                      <span className="font-semibold">₦750,000</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Your Average Rent</span>
-                      <span className="font-semibold">
-                        ₦{properties.length > 0 
-                          ? (properties.reduce((sum, p) => sum + p.rent, 0) / properties.length).toLocaleString()
-                          : '0'
-                        }
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Market Position</span>
-                      <Badge variant="secondary">Above Average</Badge>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Occupancy Rate</span>
-                      <span className="font-semibold">
-                        {totalProperties > 0 ? Math.round((occupiedProperties / totalProperties) * 100) : 0}%
-                      </span>
+            {/* Insightful Analytics Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+              {/* Rent Insights Card - clean style */}
+              <Card className="bg-white rounded-xl shadow-md border-0">
+                <CardContent className="p-8 flex flex-col justify-between h-full">
+                  <div className="flex items-center mb-4">
+                    <BarChart3 className="h-10 w-10 text-blue-500 mr-3" />
+                    <div>
+                      <p className="text-base font-semibold text-blue-700">Rent Insights</p>
+                      <p className="text-xs text-gray-500">Market averages for all properties</p>
                     </div>
                   </div>
+                  {marketStatsLoading ? (
+                    <span className="text-gray-400 text-sm">Loading...</span>
+                  ) : marketStatsError ? (
+                    <span className="text-red-500 text-sm">{marketStatsError}</span>
+                  ) : marketStats ? (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl font-bold text-blue-700">₦{marketStats.avgRent?.toLocaleString() || '-'}</span>
+                        <span className="text-xs text-gray-500">Avg. Rent</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg font-semibold text-blue-600">₦{marketStats.minRent?.toLocaleString() || '-'}</span>
+                        <span className="text-xs text-gray-500">Min</span>
+                        <span className="text-lg font-semibold text-blue-600">₦{marketStats.maxRent?.toLocaleString() || '-'}</span>
+                        <span className="text-xs text-gray-500">Max</span>
+                      </div>
+                    </div>
+                  ) : null}
+                </CardContent>
+              </Card>
+              {/* Top City Card - clean style */}
+              <Card className="bg-white rounded-xl shadow-md border-0">
+                <CardContent className="p-8 flex flex-col justify-between h-full">
+                  <div className="flex items-center mb-4">
+                    <MapPin className="h-10 w-10 text-cyan-500 mr-3" />
+                    <div>
+                      <p className="text-base font-semibold text-cyan-700">Top City</p>
+                      <p className="text-xs text-gray-500">Most active city by listings</p>
+                    </div>
+                  </div>
+                  {marketStatsLoading ? (
+                    <span className="text-gray-400 text-sm">Loading...</span>
+                  ) : marketStatsError ? (
+                    <span className="text-red-500 text-sm">{marketStatsError}</span>
+                  ) : marketStats ? (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl font-bold text-cyan-700">{marketStats.topCities?.[0]?.['_id'] || '-'}</span>
+                        <span className="text-xs text-gray-500">City</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg font-semibold text-cyan-600">{marketStats.topCities?.[0]?.count || '-'}</span>
+                        <span className="text-xs text-gray-500">Properties</span>
+                      </div>
+                    </div>
+                  ) : null}
+                </CardContent>
+              </Card>
+              {/* Recent Properties Card - clean style */}
+              <Card className="bg-white rounded-xl shadow-md border-0">
+                <CardContent className="p-8 flex flex-col justify-between h-full">
+                  <div className="flex items-center mb-4">
+                    <Plus className="h-10 w-10 text-green-500 mr-3" />
+                    <div>
+                      <p className="text-base font-semibold text-green-700">Recent Properties</p>
+                      <p className="text-xs text-gray-500">New listings in the last 30 days</p>
+                    </div>
+                  </div>
+                  {marketStatsLoading ? (
+                    <span className="text-gray-400 text-sm">Loading...</span>
+                  ) : marketStatsError ? (
+                    <span className="text-red-500 text-sm">{marketStatsError}</span>
+                  ) : marketStats ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl font-bold text-green-700">{marketStats.recentProperties ?? '-'}</span>
+                      <span className="text-xs text-gray-500">New</span>
+                    </div>
+                  ) : null}
                 </CardContent>
               </Card>
             </div>
+            {/* Occupancy Breakdown Bar */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Occupancy Breakdown</CardTitle>
+                <CardDescription>See the ratio of occupied to available properties.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-4">
+                  <span className="text-green-600 font-semibold">Occupied</span>
+                  <Progress value={properties.length > 0 ? (properties.filter(p => p.status === 'occupied').length / properties.length) * 100 : 0} className="w-1/2" />
+                  <span className="text-cyan-600 font-semibold">Available</span>
+                </div>
+                <div className="flex justify-between text-xs text-gray-500 mt-2">
+                  <span>{properties.filter(p => p.status === 'occupied').length} occupied</span>
+                  <span>{properties.filter(p => p.status === 'available').length} available</span>
+                </div>
+              </CardContent>
+            </Card>
+            {/* Top Properties by Inquiries/Views */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Top Properties</CardTitle>
+                <CardDescription>Most in-demand properties (by inquiries/views)</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {properties.length > 0 ? [...properties].sort((a, b) => (b.inquiries || 0) - (a.inquiries || 0)).slice(0, 3).map((property, idx) => (
+                    <div key={property._id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                      <div>
+                        <span className="font-semibold">{idx + 1}. {property.title}</span>
+                        <span className="ml-2 text-xs text-gray-500">{property.location.city}</span>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <span className="text-purple-600 font-semibold">{property.inquiries} inquiries</span>
+                        <span className="text-blue-600 font-semibold">{property.views} views</span>
+                      </div>
+                    </div>
+                  )) : <span className="text-gray-500">No properties yet.</span>}
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="profile" className="space-y-6">

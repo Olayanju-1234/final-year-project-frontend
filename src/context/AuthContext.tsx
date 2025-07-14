@@ -104,6 +104,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setToken(response.data.token)
       setUser(response.data.user)
       localStorage.setItem("token", response.data.token)
+      localStorage.setItem("user", JSON.stringify(response.data.user))
       // Redirect based on userType
       if (response.data.user.userType === "tenant") {
         router.push("/tenant-dashboard")
@@ -123,6 +124,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setToken(response.data.token)
       setUser(response.data.user)
       localStorage.setItem("token", response.data.token)
+      localStorage.setItem("user", JSON.stringify(response.data.user))
       // Redirect based on userType
       if (response.data.user.userType === "tenant") {
         router.push("/tenant-dashboard")

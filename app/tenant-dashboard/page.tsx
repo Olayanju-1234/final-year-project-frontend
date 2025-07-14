@@ -44,6 +44,7 @@ import {
   MessageSquare,
   Calendar,
   DollarSign,
+  BarChart3,
 } from "lucide-react";
 import { useAuth } from "@/src/context/AuthContext";
 import { tenantsApi } from "@/src/lib/tenantsApi";
@@ -63,6 +64,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { communicationApi } from "@/src/lib/communicationApi";
+import { RequestViewingModal } from "@/components/common/RequestViewingModal";
 
 export default function TenantDashboard() {
   const { user, isLoading: authLoading } = useAuth();
@@ -76,13 +79,28 @@ export default function TenantDashboard() {
   const [updatingPreferences, setUpdatingPreferences] = useState(false);
   const [activeTab, setActiveTab] = useState("matches");
   const [showViewingModal, setShowViewingModal] = useState(false);
-  const [viewingProperty, setViewingProperty] = useState<IProperty | null>(
-    null
-  );
-  const [requestedDate, setRequestedDate] = useState("");
-  const [requestedTime, setRequestedTime] = useState("");
-  const [viewingMessage, setViewingMessage] = useState("");
+  const [viewingPropertyId, setViewingPropertyId] = useState<string | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [viewings, setViewings] = useState<any[]>([]);
+  const [loadingViewings, setLoadingViewings] = useState(false);
+
+  // Add a function to fetch viewing requests (reuse logic from useEffect)
+  const fetchViewings = async () => {
+    if (!user) return;
+    setLoadingViewings(true);
+    try {
+      const response = await communicationApi.getViewings(undefined, undefined, undefined, 'tenant');
+      if (response.success) {
+        setViewings((response.data ?? []).map((v: any) => convertBackendToFrontend.viewing(v)));
+      } else {
+        setViewings([]);
+      }
+    } catch {
+      setViewings([]);
+    } finally {
+      setLoadingViewings(false);
+    }
+  };
 
   // Fetch tenant profile and preferences
   useEffect(() => {
@@ -130,6 +148,11 @@ export default function TenantDashboard() {
 
     fetchTenantData();
   }, [user, authLoading, toast]);
+
+  useEffect(() => {
+    if (!user) return;
+    fetchViewings();
+  }, [user]);
 
   // Fetch property matches from optimization API
   const fetchMatches = async (tenantData: ITenant) => {
@@ -346,17 +369,11 @@ export default function TenantDashboard() {
     }
   };
 
-  const openViewingModal = (property: IProperty) => {
-    setViewingProperty(property);
-    setRequestedDate("");
-    setRequestedTime("");
-    setViewingMessage("");
-    setShowViewingModal(true);
-  };
-
-  const handleSubmitViewing = async () => {
-    if (!user || !viewingProperty) return;
-    let landlordId: string | undefined = viewingProperty.landlordId as any;
+  // New handler for submitting viewing request
+  const handleSubmitViewing = async ({ propertyId, requestedDate, requestedTime, notes }: { propertyId: string, requestedDate: string, requestedTime: string, notes?: string }) => {
+    if (!user) return;
+    const property = properties.find((p) => p._id === propertyId);
+    let landlordId = property?.landlordId;
     if (typeof landlordId === 'object' && landlordId !== null) {
       const lid: any = landlordId;
       landlordId = lid._id || lid.id || '';
@@ -373,20 +390,20 @@ export default function TenantDashboard() {
     try {
       const tenantId = user.tenantId || user._id;
       const res = await tenantsApi.requestViewing(tenantId, {
-        propertyId: viewingProperty._id,
+        propertyId,
         landlordId,
         requestedDate,
         requestedTime,
-        message: viewingMessage,
+        message: notes,
       });
       if (res.success) {
         toast({
           title: "Viewing Requested!",
-          description:
-            "Your viewing request has been sent to the property manager.",
+          description: "Your viewing request has been sent to the property manager.",
           variant: "default",
         });
         setShowViewingModal(false);
+        await fetchViewings();
       }
     } catch (error) {
       toast({
@@ -395,6 +412,12 @@ export default function TenantDashboard() {
         variant: "destructive",
       });
     }
+  };
+
+  // Replace openViewingModal to set propertyId for modal
+  const openViewingModal = (property: IProperty) => {
+    setViewingPropertyId(property._id);
+    setShowViewingModal(true);
   };
 
   if (authLoading || loading) {
@@ -468,13 +491,17 @@ export default function TenantDashboard() {
             onValueChange={setActiveTab}
             className="space-y-6"
           >
-            <TabsList className="grid w-full grid-cols-5 lg:w-[600px]">
-              <TabsTrigger value="matches">My Matches</TabsTrigger>
-              <TabsTrigger value="preferences">Preferences</TabsTrigger>
-              <TabsTrigger value="saved">Saved Properties</TabsTrigger>
-              <TabsTrigger value="communications">Messages</TabsTrigger>
-              <TabsTrigger value="profile">Profile</TabsTrigger>
-            </TabsList>
+            <div className="flex justify-start mb-6">
+              <TabsList className="flex gap-4 bg-muted rounded-md p-1">
+                <TabsTrigger value="matches">My Matches</TabsTrigger>
+                <TabsTrigger value="preferences">Preferences</TabsTrigger>
+                <TabsTrigger value="saved">Saved Properties</TabsTrigger>
+                <TabsTrigger value="viewing-requests">Viewing Requests{viewings.length > 0 ? ` (${viewings.length})` : ''}</TabsTrigger>
+                <TabsTrigger value="communications">Messages</TabsTrigger>
+                <TabsTrigger value="analytics">Analytics</TabsTrigger>
+                <TabsTrigger value="profile">Profile</TabsTrigger>
+              </TabsList>
+            </div>
 
             <TabsContent value="matches" className="space-y-6">
               {/* Quick Stats */}
@@ -669,10 +696,6 @@ export default function TenantDashboard() {
                           </div>
 
                           <div className="flex space-x-2">
-                            <Button variant="outline" size="sm">
-                              <Eye className="h-4 w-4 mr-2" />
-                              View Details
-                            </Button>
                             <Button
                               variant="outline"
                               size="sm"
@@ -861,8 +884,8 @@ export default function TenantDashboard() {
                             </p>
                             <div className="flex space-x-2">
                               <Button variant="outline" size="sm">
-                                <Eye className="h-4 w-4 mr-2" />
-                                View Details
+                                <Heart className="h-4 w-4 mr-2" />
+                                Save
                               </Button>
                               <Button variant="outline" size="sm">
                                 <MessageSquare className="h-4 w-4 mr-2" />
@@ -890,8 +913,175 @@ export default function TenantDashboard() {
               )}
             </TabsContent>
 
+            <TabsContent value="viewing-requests" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Viewing Requests</CardTitle>
+                  <CardDescription>Your property viewing requests and their status.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {loadingViewings ? (
+                    <div className="flex justify-center items-center h-40">
+                      <LoadingSpinner />
+                    </div>
+                  ) : viewings.length === 0 ? (
+                    <p>No viewing requests found.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {viewings.map((viewing) => (
+                        <Card key={viewing._id} className="hover:shadow-md transition-shadow">
+                          <CardContent className="p-4">
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Badge>{viewing.status}</Badge>
+                                </div>
+                                <h4 className="font-semibold">
+                                  Property: {viewing.propertyId?.title || 'Unknown Property'}
+                                  {viewing.propertyId?.location && (
+                                    <span className="block text-xs text-gray-500">
+                                      {viewing.propertyId.location.address}, {viewing.propertyId.location.city}
+                                    </span>
+                                  )}
+                                </h4>
+                                <p className="text-sm text-muted-foreground mt-1">
+                                  Landlord: {viewing.landlordId?.name || 'Unknown User'}
+                                  {viewing.landlordId?.email && (
+                                    <span className="block text-xs text-gray-500">{viewing.landlordId.email}</span>
+                                  )}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                  Date: {viewing.requestedDate?.slice(0, 10)}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                  Time: {viewing.requestedTime}
+                                </p>
+                                {viewing.notes && (
+                                  <p className="text-sm text-muted-foreground mt-1">
+                                    Notes: {viewing.notes}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
             <TabsContent value="communications" className="space-y-6">
               {user && <MessageCenter userId={user._id} userType="tenant" />}
+            </TabsContent>
+
+            <TabsContent value="analytics" className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <Card>
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">Total Matches</p>
+                        <p className="text-3xl font-bold text-blue-600">{matches.length}</p>
+                      </div>
+                      <Search className="h-8 w-8 text-blue-600" />
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">Viewing Requests</p>
+                        <p className="text-3xl font-bold text-green-600">{viewings.length}</p>
+                      </div>
+                      <Calendar className="h-8 w-8 text-green-600" />
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">Saved Properties</p>
+                        <p className="text-3xl font-bold text-purple-600">{tenant?.savedProperties?.length || 0}</p>
+                      </div>
+                      <Heart className="h-8 w-8 text-purple-600" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                <Card>
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">Best Match Score</p>
+                        <p className="text-3xl font-bold text-orange-600">{matches.length > 0 ? `${Math.round(Math.max(...matches.map((m) => m.matchScore)))}%` : '-'}</p>
+                      </div>
+                      <Star className="h-8 w-8 text-orange-600" />
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">Average Match Score</p>
+                        <p className="text-3xl font-bold text-cyan-600">{matches.length > 0 ? `${Math.round(matches.reduce((sum, m) => sum + m.matchScore, 0) / matches.length)}%` : '-'}</p>
+                      </div>
+                      <BarChart3 className="h-8 w-8 text-cyan-600" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Your Activity Over Time</CardTitle>
+                  <CardDescription>Coming soon: Visualize your property search and engagement trends.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-32 flex items-center justify-center text-gray-400 bg-gray-50 rounded-md border border-dashed border-gray-200">
+                    <span>Analytics chart coming soon!</span>
+                  </div>
+                </CardContent>
+              </Card>
+              {/* List all saved properties and their status */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Saved Properties Status</CardTitle>
+                  <CardDescription>See the current status of all properties you have saved.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {(tenant?.savedProperties || []).map((propertyId) => {
+                      const property = properties.find((p) => p._id === propertyId);
+                      return (
+                        <div key={propertyId} className="flex flex-col md:flex-row md:items-center md:justify-between border-b pb-2 last:border-b-0 last:pb-0">
+                          <div>
+                            <span className="font-semibold">{property?.title || 'Unknown Property'}</span>
+                            {property?.location && (
+                              <span className="ml-2 text-xs text-gray-500">{property.location.address}, {property.location.city}</span>
+                            )}
+                            {property?.rent && (
+                              <span className="ml-2 text-xs text-blue-600">₦{property.rent.toLocaleString()}/year</span>
+                            )}
+                          </div>
+                          <div>
+                            <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${property ? (property.status === 'available' ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-700') : 'bg-red-100 text-red-700'}`}>
+                              {property ? property.status : 'Deleted/Unavailable'}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {(!tenant?.savedProperties || tenant.savedProperties.length === 0) && (
+                      <div className="text-gray-500">You have no saved properties.</div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
             </TabsContent>
 
             <TabsContent value="profile" className="space-y-6">
@@ -901,45 +1091,12 @@ export default function TenantDashboard() {
         )}
       </div>
 
-      <Dialog open={showViewingModal} onOpenChange={setShowViewingModal}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Request Viewing</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label>Date</Label>
-              <input
-                type="date"
-                className="w-full border rounded px-2 py-1"
-                value={requestedDate}
-                onChange={(e) => setRequestedDate(e.target.value)}
-              />
-            </div>
-            <div>
-              <Label>Time</Label>
-              <input
-                type="time"
-                className="w-full border rounded px-2 py-1"
-                value={requestedTime}
-                onChange={(e) => setRequestedTime(e.target.value)}
-              />
-            </div>
-            <div>
-              <Label>Message (optional)</Label>
-              <textarea
-                className="w-full border rounded px-2 py-1"
-                value={viewingMessage}
-                onChange={(e) => setViewingMessage(e.target.value)}
-                placeholder="Message to landlord"
-              />
-            </div>
-            <Button className="w-full" onClick={handleSubmitViewing}>
-              Submit Viewing Request
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <RequestViewingModal
+        open={showViewingModal}
+        onOpenChange={setShowViewingModal}
+        initialPropertyId={viewingPropertyId || undefined}
+        onSubmit={handleSubmitViewing}
+      />
     </div>
   );
 }
