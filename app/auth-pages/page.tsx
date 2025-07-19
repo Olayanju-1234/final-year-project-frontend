@@ -32,6 +32,15 @@ export default function AuthPages() {
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [passwordTouched, setPasswordTouched] = useState(false)
+  const [confirmPasswordTouched, setConfirmPasswordTouched] = useState(false)
+  const [passwordValidations, setPasswordValidations] = useState({
+    minLength: false,
+    uppercase: false,
+    number: false,
+    specialChar: false,
+  })
   const [phone, setPhone] = useState("")
 
   // Auto-switch authMode based on ?mode=login or ?mode=signup
@@ -42,6 +51,15 @@ export default function AuthPages() {
       setAuthMode("login");
     }
   }, [modeParam]);
+
+  useEffect(() => {
+    setPasswordValidations({
+      minLength: password.length >= 8,
+      uppercase: /[A-Z]/.test(password),
+      number: /[0-9]/.test(password),
+      specialChar: /[^A-Za-z0-9]/.test(password),
+    })
+  }, [password])
 
   const toggleAuthMode = () => {
     const newMode = authMode === "login" ? "register" : "login";
@@ -55,6 +73,7 @@ export default function AuthPages() {
     setName("");
     setEmail("");
     setPassword("");
+    setConfirmPassword(""); // Clear confirm password
     setPhone("");
     setError(null);
   };
@@ -64,6 +83,13 @@ export default function AuthPages() {
     setIsLoading(true)
     setError(null)
     try {
+      if (authMode === "register") {
+        if (password !== confirmPassword) {
+          setError("Passwords do not match.")
+          setIsLoading(false)
+          return
+        }
+      }
       if (authMode === "login") {
         await login({ email, password })
         // Show success toast for login
@@ -129,7 +155,7 @@ export default function AuthPages() {
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-950">
-      <Card className="mx-auto max-w-sm">
+      <Card className="mx-auto max-w-md w-full">
         <CardHeader>
           <CardTitle className="text-2xl">{authMode === "login" ? "Login" : "Register"}</CardTitle>
           <CardDescription>
@@ -157,7 +183,7 @@ export default function AuthPages() {
                 />
               </div>
               <div className="grid gap-2">
-                <div className="flex items-center">
+                <div className="flex items-center justify-between">
                   <Label htmlFor="password">Password</Label>
                 </div>
                 <Input
@@ -165,9 +191,54 @@ export default function AuthPages() {
                   type="password"
                   required
                   value={password}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                    setPassword(e.target.value)
+                    setPasswordTouched(true)
+                  }}
+                  onBlur={() => setPasswordTouched(true)}
                 />
+                {authMode === "register" && passwordTouched && (
+                  <div className="text-xs mt-1 space-y-1">
+                    <div className="flex items-center gap-1">
+                      <span>{passwordValidations.minLength ? "✅" : "⬜"}</span>
+                      <span>At least 8 characters</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span>{passwordValidations.uppercase ? "✅" : "⬜"}</span>
+                      <span>One uppercase letter</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span>{passwordValidations.number ? "✅" : "⬜"}</span>
+                      <span>One number</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span>{passwordValidations.specialChar ? "✅" : "⬜"}</span>
+                      <span>One special character</span>
+                    </div>
+                  </div>
+                )}
               </div>
+              {authMode === "register" && (
+                <div className="grid gap-2">
+                  <Label htmlFor="confirm-password">Confirm Password</Label>
+                  <Input
+                    id="confirm-password"
+                    type="password"
+                    required
+                    value={confirmPassword}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      setConfirmPassword(e.target.value)
+                      setConfirmPasswordTouched(true)
+                    }}
+                    onBlur={() => setConfirmPasswordTouched(true)}
+                  />
+                  {confirmPasswordTouched && confirmPassword && (
+                    <span className={`text-xs mt-1 ${confirmPassword !== password ? "text-red-500" : "text-green-600"}`}>
+                      {confirmPassword !== password ? "Passwords do not match" : "Passwords match"}
+                    </span>
+                  )}
+                </div>
+              )}
               {authMode === "register" && (
                 <>
                   <div className="grid gap-2">
@@ -196,7 +267,7 @@ export default function AuthPages() {
                   <Button onClick={() => window.location.reload()}>Retry</Button>
                 </div>
               ) : (
-                <Button type="submit" className="w-full" disabled={isLoading}>
+                <Button type="submit" className="w-full" disabled={isLoading || (authMode === "register" && (password !== confirmPassword || !Object.values(passwordValidations).every(Boolean)))}>
                   {isLoading ? "Processing..." : authMode === "login" ? "Login" : "Create an account"}
                 </Button>
               )}
